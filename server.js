@@ -2,14 +2,23 @@ const express = require('express');
 const admin = require('firebase-admin');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL, 'https://your-app-name.onrender.com'] 
+    : 'http://localhost:3000',
+  credentials: true
+}));
 app.use(bodyParser.json());
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Firebase Admin SDK initialization
 const serviceAccount = {
@@ -36,6 +45,11 @@ app.locals.db = db;
 
 console.log('Firebase Connected');
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'Server is running' });
+});
+
 // Routes
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/warps', require('./routes/warps'));
@@ -43,7 +57,7 @@ app.use('/api/fabric-cuts', require('./routes/fabricCuts'));
 app.use('/api/looms', require('./routes/looms'));
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
 // Export db for other modules
 module.exports = { db }; 
