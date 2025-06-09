@@ -2,13 +2,20 @@ services:
   - type: web
     name: fabric-production-tracker
     env: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --production=false && npm run build
     startCommand: npm start
     plan: starter
     region: oregon
     branch: main
+    buildTimeoutSeconds: 1200
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_OPTIONS
-        value: --max-old-space-size=1024 
+        value: --max-old-space-size=2048
+      - key: NPM_CONFIG_PRODUCTION
+        value: false
+      - key: GENERATE_SOURCEMAP
+        value: false
+      - key: DISABLE_ESLINT_PLUGIN
+        value: true 
