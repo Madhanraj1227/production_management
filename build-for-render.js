@@ -29,10 +29,29 @@ try {
   for (const testPath of possiblePaths) {
     const resolvedPath = path.resolve(testPath);
     console.log(`  - Testing: ${testPath} -> ${resolvedPath}`);
-    if (fs.existsSync(resolvedPath) && fs.existsSync(path.join(resolvedPath, 'package.json'))) {
-      clientDir = resolvedPath;
-      console.log(`  ✅ Found client directory: ${clientDir}`);
-      break;
+    
+    if (fs.existsSync(resolvedPath)) {
+      console.log(`    ✅ Directory exists`);
+      
+      // Show contents of the client directory
+      try {
+        const clientContents = fs.readdirSync(resolvedPath);
+        console.log(`    📁 Contents: ${clientContents.join(', ')}`);
+        
+        const packageJsonPath = path.join(resolvedPath, 'package.json');
+        if (fs.existsSync(packageJsonPath)) {
+          console.log(`    ✅ package.json found`);
+          clientDir = resolvedPath;
+          console.log(`  🎯 Selected client directory: ${clientDir}`);
+          break;
+        } else {
+          console.log(`    ❌ package.json NOT found at: ${packageJsonPath}`);
+        }
+      } catch (err) {
+        console.log(`    ❌ Error reading directory: ${err.message}`);
+      }
+    } else {
+      console.log(`    ❌ Directory does not exist`);
     }
   }
 
@@ -44,13 +63,7 @@ try {
       const isDir = fs.statSync(itemPath).isDirectory();
       console.log(`  ${isDir ? '[DIR]' : '[FILE]'} ${item}`);
     });
-    throw new Error('Client directory not found in any expected location');
-  }
-
-  // Verify package.json exists
-  const clientPackageJson = path.join(clientDir, 'package.json');
-  if (!fs.existsSync(clientPackageJson)) {
-    throw new Error(`package.json not found in client directory: ${clientPackageJson}`);
+    throw new Error('Client directory with package.json not found in any expected location');
   }
 
   console.log('📦 Installing client dependencies...');
