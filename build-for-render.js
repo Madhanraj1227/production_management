@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('🚀 Starting optimized build process...');
+console.log('📍 Current working directory:', process.cwd());
+console.log('📍 Script directory:', __dirname);
 
 // Set memory and build optimizations
 process.env.NODE_OPTIONS = '--max-old-space-size=2048';
@@ -14,10 +16,41 @@ process.env.CI = 'false';
 process.env.SKIP_PREFLIGHT_CHECK = 'true';
 
 try {
-  // Check if client directory exists
-  const clientDir = path.join(__dirname, 'client');
-  if (!fs.existsSync(clientDir)) {
-    throw new Error('Client directory not found');
+  // Check multiple possible client directory locations
+  let clientDir;
+  const possiblePaths = [
+    path.join(__dirname, 'client'),
+    path.join(process.cwd(), 'client'),
+    path.join(__dirname, '..', 'client'),
+    './client'
+  ];
+
+  console.log('🔍 Searching for client directory in possible locations:');
+  for (const testPath of possiblePaths) {
+    const resolvedPath = path.resolve(testPath);
+    console.log(`  - Testing: ${testPath} -> ${resolvedPath}`);
+    if (fs.existsSync(resolvedPath) && fs.existsSync(path.join(resolvedPath, 'package.json'))) {
+      clientDir = resolvedPath;
+      console.log(`  ✅ Found client directory: ${clientDir}`);
+      break;
+    }
+  }
+
+  if (!clientDir) {
+    console.log('📁 Available directories in current location:');
+    const currentDirContents = fs.readdirSync(process.cwd());
+    currentDirContents.forEach(item => {
+      const itemPath = path.join(process.cwd(), item);
+      const isDir = fs.statSync(itemPath).isDirectory();
+      console.log(`  ${isDir ? '[DIR]' : '[FILE]'} ${item}`);
+    });
+    throw new Error('Client directory not found in any expected location');
+  }
+
+  // Verify package.json exists
+  const clientPackageJson = path.join(clientDir, 'package.json');
+  if (!fs.existsSync(clientPackageJson)) {
+    throw new Error(`package.json not found in client directory: ${clientPackageJson}`);
   }
 
   console.log('📦 Installing client dependencies...');
@@ -63,5 +96,6 @@ try {
 
 } catch (error) {
   console.error('❌ Build failed:', error.message);
+  console.error('🔍 Error details:', error);
   process.exit(1);
 } 
