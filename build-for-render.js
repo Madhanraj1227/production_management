@@ -4,12 +4,13 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-console.log('🚀 Starting Render-optimized build process...');
+console.log('🚀 Starting optimized build process...');
 
-// Set memory limits
-process.env.NODE_OPTIONS = '--max-old-space-size=3072';
+// Set memory and build optimizations
+process.env.NODE_OPTIONS = '--max-old-space-size=2048';
 process.env.GENERATE_SOURCEMAP = 'false';
 process.env.DISABLE_ESLINT_PLUGIN = 'true';
+process.env.BUILD_PATH = './client/build';
 
 try {
   // Check if client directory exists
@@ -19,34 +20,41 @@ try {
   }
 
   console.log('📦 Installing client dependencies...');
-  execSync('npm install --production=false', { 
+  execSync('npm install --no-audit --no-fund', { 
     cwd: clientDir, 
     stdio: 'inherit',
-    timeout: 300000 // 5 minutes timeout
+    timeout: 180000 // 3 minutes timeout
   });
 
   console.log('🔨 Building React application...');
   execSync('npm run build', { 
     cwd: clientDir, 
     stdio: 'inherit',
-    timeout: 600000 // 10 minutes timeout
+    timeout: 300000, // 5 minutes timeout
+    env: {
+      ...process.env,
+      CI: 'false', // Disable CI mode warnings
+      SKIP_PREFLIGHT_CHECK: 'true'
+    }
   });
 
-  // Verify build output
+  // Verify build
   const buildDir = path.join(clientDir, 'build');
   if (!fs.existsSync(buildDir)) {
-    throw new Error('Build directory was not created');
+    throw new Error('Build directory not created');
   }
 
   const indexHtml = path.join(buildDir, 'index.html');
   if (!fs.existsSync(indexHtml)) {
-    throw new Error('index.html was not generated');
+    throw new Error('Build failed - index.html not found');
   }
 
   console.log('✅ Build completed successfully!');
-  console.log('📁 Build artifacts:');
-  const files = fs.readdirSync(buildDir);
-  files.forEach(file => console.log(`   - ${file}`));
+  console.log('📁 Build files created in:', buildDir);
+  
+  // List build contents for verification
+  const buildFiles = fs.readdirSync(buildDir);
+  console.log('🗃️  Build contents:', buildFiles.slice(0, 10).join(', '));
 
 } catch (error) {
   console.error('❌ Build failed:', error.message);
