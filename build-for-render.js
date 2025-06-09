@@ -10,7 +10,8 @@ console.log('🚀 Starting optimized build process...');
 process.env.NODE_OPTIONS = '--max-old-space-size=2048';
 process.env.GENERATE_SOURCEMAP = 'false';
 process.env.DISABLE_ESLINT_PLUGIN = 'true';
-process.env.BUILD_PATH = './client/build';
+process.env.CI = 'false';
+process.env.SKIP_PREFLIGHT_CHECK = 'true';
 
 try {
   // Check if client directory exists
@@ -26,14 +27,18 @@ try {
     timeout: 180000 // 3 minutes timeout
   });
 
-  console.log('🔨 Building React application...');
-  execSync('npm run build', { 
+  console.log('🔨 Building React application with react-scripts...');
+  // Call react-scripts directly to avoid infinite loop
+  execSync('npx react-scripts build', { 
     cwd: clientDir, 
     stdio: 'inherit',
     timeout: 300000, // 5 minutes timeout
     env: {
       ...process.env,
-      CI: 'false', // Disable CI mode warnings
+      NODE_OPTIONS: '--max-old-space-size=2048',
+      GENERATE_SOURCEMAP: 'false',
+      DISABLE_ESLINT_PLUGIN: 'true',
+      CI: 'false',
       SKIP_PREFLIGHT_CHECK: 'true'
     }
   });
