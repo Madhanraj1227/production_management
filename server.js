@@ -8,67 +8,23 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://your-app-name.onrender.com'] 
-    : 'http://localhost:3000',
-  credentials: true
-}));
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // Firebase Admin SDK initialization
-let serviceAccount;
-
-if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-  // Method 1: Use complete service account JSON (easier for deployment)
-  try {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-  } catch (error) {
-    console.error('Error parsing FIREBASE_SERVICE_ACCOUNT_JSON:', error);
-    process.exit(1);
-  }
-} else {
-  // Method 2: Use individual environment variables
-  if (process.env.NODE_ENV === 'production') {
-    // For production (Render), use individual environment variables
-    serviceAccount = {
-      type: "service_account",
-      project_id: process.env.FIREBASE_PROJECT_ID,
-      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      client_id: process.env.FIREBASE_CLIENT_ID,
-      auth_uri: "https://accounts.google.com/o/oauth2/auth",
-      token_uri: "https://oauth2.googleapis.com/token",
-      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-      client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL
-    };
-  } else {
-    // For development, use the same format but with optional chaining
-    serviceAccount = {
-      type: "service_account",
-      project_id: process.env.FIREBASE_PROJECT_ID,
-      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-      private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      client_id: process.env.FIREBASE_CLIENT_ID,
-      auth_uri: "https://accounts.google.com/o/oauth2/auth",
-      token_uri: "https://oauth2.googleapis.com/token",
-      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-      client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL
-    };
-  }
-}
-
-// Validate service account
-if (!serviceAccount || !serviceAccount.project_id || !serviceAccount.private_key) {
-  console.error('Invalid Firebase service account configuration');
-  process.exit(1);
-}
+const serviceAccount = {
+    type: "service_account",
+    project_id: process.env.FIREBASE_PROJECT_ID,
+    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+    client_id: process.env.FIREBASE_CLIENT_ID,
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL
+};
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -81,19 +37,32 @@ app.locals.db = db;
 
 console.log('Firebase Connected');
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'Server is running' });
-});
+// Import routes
+const orderRoutes = require('./routes/orders');
+const warpRoutes = require('./routes/warps');
+const loomRoutes = require('./routes/looms');
+const fabricCutRoutes = require('./routes/fabricCuts');
+const databaseRoutes = require('./routes/database');
 
-// Routes
-app.use('/api/orders', require('./routes/orders'));
-app.use('/api/warps', require('./routes/warps'));
-app.use('/api/fabric-cuts', require('./routes/fabricCuts'));
-app.use('/api/looms', require('./routes/looms'));
+// Use routes
+app.use('/api/orders', orderRoutes);
+app.use('/api/warps', warpRoutes);
+app.use('/api/looms', loomRoutes);
+app.use('/api/fabric-cuts', fabricCutRoutes);
+app.use('/api/database', databaseRoutes);
+
+// Serve static files from the React app build directory
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'client/build')));
+
+  // The "catchall" handler: send back React's index.html file.
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 // Export db for other modules
 module.exports = { db }; 

@@ -552,6 +552,7 @@ router.post('/', async (req, res) => {
       }
 
       const orderData = orderDoc.data();
+      const totalWarpingQuantity = orderData.warpingQuantity || 0;
       const totalOrderQuantity = orderData.orderQuantity || 0;
 
       // Get all existing warps for this order
@@ -581,11 +582,12 @@ router.post('/', async (req, res) => {
         console.error('Error fetching freed quantity:', error);
       }
 
-      const availableQuantity = totalOrderQuantity - allocatedQuantity + freedQuantity;
+      // Use warping quantity instead of order quantity for validation
+      const availableQuantity = totalWarpingQuantity - allocatedQuantity + freedQuantity;
 
       if (requestedQuantity > availableQuantity) {
         return res.status(400).json({ 
-          error: `Insufficient quantity. Requested: ${requestedQuantity}m, Available: ${availableQuantity}m` 
+          error: `Insufficient quantity. Requested: ${requestedQuantity}m, Available: ${availableQuantity}m (from warping quantity: ${totalWarpingQuantity}m)` 
         });
       }
 
@@ -886,6 +888,7 @@ router.get('/available-quantity/:orderId', async (req, res) => {
     }
 
     const orderData = orderDoc.data();
+    const totalWarpingQuantity = orderData.warpingQuantity || 0;
     const totalOrderQuantity = orderData.orderQuantity || 0;
 
     // Get all warps for this order
@@ -921,10 +924,12 @@ router.get('/available-quantity/:orderId', async (req, res) => {
       // Continue without freed quantity if error occurs
     }
 
-    const availableQuantity = totalOrderQuantity - allocatedQuantity + freedQuantity;
+    // Use warping quantity for available calculation
+    const availableQuantity = totalWarpingQuantity - allocatedQuantity + freedQuantity;
 
     res.json({
       orderId,
+      totalWarpingQuantity,
       totalOrderQuantity,
       allocatedQuantity,
       freedQuantity,

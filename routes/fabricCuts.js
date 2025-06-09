@@ -2,6 +2,186 @@ const express = require('express');
 const router = express.Router();
 const QRCode = require('qrcode');
 
+// Get all fabric cuts that have been scanned for loom-in (history) - ULTRA FAST VERSION WITH PAGINATION
+router.get('/loom-in-history-ultra-fast', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        const { limit = '50', search = '', searchAll = 'false' } = req.query;
+        const limitNumber = parseInt(limit);
+        const isFullSearch = searchAll === 'true' || search.trim() !== '';
+        
+        console.log(`Fetching loom-in history - Limit: ${limitNumber}, Search: "${search}", Full Search: ${isFullSearch}`);
+        const startTime = Date.now();
+        
+        // Step 1: Get all fabric cuts with inspection arrival in one scan
+        const fabricCutsSnapshot = await db.collection('fabricCuts').get();
+        const scannedFabricCuts = [];
+        const warpIds = new Set();
+        
+        fabricCutsSnapshot.forEach(doc => {
+            const fabricCutData = doc.data();
+            // Only include fabric cuts that have been scanned for loom-in
+            if (fabricCutData.inspectionArrival) {
+                const fabricCut = {
+                    id: doc.id,
+                    ...fabricCutData
+                };
+                
+                // If searching, apply search filter here for efficiency
+                if (isFullSearch && search.trim() !== '') {
+                    const searchTerm = search.toLowerCase();
+                    const fabricNumber = fabricCut.fabricNumber?.toLowerCase() || '';
+                    const qrData = `${fabricCut.warp?.warpNumber || 'unknown'}/${String(fabricCut.cutNumber || '').padStart(2, '0')}`.toLowerCase();
+                    
+                    if (fabricNumber.includes(searchTerm) || 
+                        qrData.includes(searchTerm) ||
+                        fabricCut.warp?.warpNumber?.toLowerCase().includes(searchTerm) ||
+                        fabricCut.warp?.warpOrderNumber?.toLowerCase().includes(searchTerm)) {
+                        scannedFabricCuts.push(fabricCut);
+                        if (fabricCutData.warpId) {
+                            warpIds.add(fabricCutData.warpId);
+                        }
+                    }
+                } else {
+                    scannedFabricCuts.push(fabricCut);
+                    if (fabricCutData.warpId) {
+                        warpIds.add(fabricCutData.warpId);
+                    }
+                }
+            }
+        });
+        
+        if (scannedFabricCuts.length === 0) {
+            console.log('No scanned fabric cuts found');
+            return res.json([]);
+        }
+        
+        // Step 2: Batch fetch all warps in parallel
+        const warpsMap = new Map();
+        const orderIds = new Set();
+        const loomIds = new Set();
+        
+        if (warpIds.size > 0) {
+            const warpPromises = Array.from(warpIds).map(async (warpId) => {
+                try {
+                    const warpDoc = await db.collection('warps').doc(warpId).get();
+                    if (warpDoc.exists) {
+                        const warpData = { id: warpDoc.id, ...warpDoc.data() };
+                        warpsMap.set(warpId, warpData);
+                        
+                        if (warpData.orderId) orderIds.add(warpData.orderId);
+                        if (warpData.loomId) loomIds.add(warpData.loomId);
+                    }
+                } catch (err) {
+                    console.error(`Error fetching warp ${warpId}:`, err);
+                }
+            });
+            await Promise.all(warpPromises);
+        }
+        
+        // Step 3: Batch fetch orders and looms in parallel
+        const [ordersMap, loomsMap] = await Promise.all([
+            // Fetch orders
+            (async () => {
+                const ordersMap = new Map();
+                if (orderIds.size > 0) {
+                    const orderPromises = Array.from(orderIds).map(async (orderId) => {
+                        try {
+                            const orderDoc = await db.collection('orders').doc(orderId).get();
+                            if (orderDoc.exists) {
+                                ordersMap.set(orderId, {
+                                    id: orderDoc.id,
+                                    ...orderDoc.data()
+                                });
+                            }
+                        } catch (err) {
+                            console.error(`Error fetching order ${orderId}:`, err);
+                        }
+                    });
+                    await Promise.all(orderPromises);
+                }
+                return ordersMap;
+            })(),
+            
+            // Fetch looms
+            (async () => {
+                const loomsMap = new Map();
+                if (loomIds.size > 0) {
+                    const loomPromises = Array.from(loomIds).map(async (loomId) => {
+                        try {
+                            const loomDoc = await db.collection('looms').doc(loomId).get();
+                            if (loomDoc.exists) {
+                                loomsMap.set(loomId, {
+                                    id: loomDoc.id,
+                                    ...loomDoc.data()
+                                });
+                            }
+                        } catch (err) {
+                            console.error(`Error fetching loom ${loomId}:`, err);
+                        }
+                    });
+                    await Promise.all(loomPromises);
+                }
+                return loomsMap;
+            })()
+        ]);
+        
+        // Step 4: Assemble the final response
+        const enrichedFabricCuts = scannedFabricCuts.map(fabricCutData => {
+            const warp = warpsMap.get(fabricCutData.warpId);
+            let enrichedWarp = null;
+            
+            if (warp) {
+                let loomData = warp.loomId ? loomsMap.get(warp.loomId) : null;
+                
+                // If loom was deleted but we have stored loom data in fabric cut, use that
+                if (!loomData && warp.loomId && (fabricCutData.loomName || fabricCutData.companyName)) {
+                    loomData = {
+                        id: warp.loomId,
+                        loomName: fabricCutData.loomName || 'N/A',
+                        companyName: fabricCutData.companyName || 'N/A'
+                    };
+                }
+                
+                enrichedWarp = {
+                    ...warp,
+                    order: warp.orderId ? ordersMap.get(warp.orderId) : null,
+                    loom: loomData
+                };
+            }
+            
+            return {
+                ...fabricCutData,
+                warp: enrichedWarp
+            };
+        });
+        
+        // Sort by inspection arrival time (newest first)
+        enrichedFabricCuts.sort((a, b) => {
+            const dateA = a.inspectionArrival?.toDate ? a.inspectionArrival.toDate() : new Date(a.inspectionArrival);
+            const dateB = b.inspectionArrival?.toDate ? b.inspectionArrival.toDate() : new Date(b.inspectionArrival);
+            return dateB.getTime() - dateA.getTime();
+        });
+        
+        // Apply limit only if not doing a full search
+        const finalResults = isFullSearch ? enrichedFabricCuts : enrichedFabricCuts.slice(0, limitNumber);
+        
+        const totalTime = Date.now() - startTime;
+        console.log(`Ultra-fast loom-in history query completed in ${totalTime}ms for ${finalResults.length} fabric cuts (${enrichedFabricCuts.length} total found)`);
+        
+        res.json({
+            fabricCuts: finalResults,
+            totalCount: enrichedFabricCuts.length,
+            isLimited: !isFullSearch,
+            limit: limitNumber,
+            hasMore: !isFullSearch && enrichedFabricCuts.length > limitNumber
+        });
+    } catch (err) {
+        console.error('Error fetching loom-in history:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // Get all fabric cuts that have been scanned for loom-in (history) - OPTIMIZED VERSION
 router.get('/loom-in-history', async (req, res) => {
     try {
@@ -853,6 +1033,138 @@ router.get('/pending-inspection-count', async (req, res) => {
     }
 });
 
+// Get recent inspection arrivals (today) - ULTRA FAST VERSION
+router.get('/recent-inspections-ultra-fast', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        console.log('Fetching recent inspections with ultra-fast optimized queries...');
+        const startTime = Date.now();
+        
+        // Get today's date range
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        // Step 1: Get all fabric cuts and filter for today's arrivals in one scan
+        const fabricCutsSnapshot = await db.collection('fabricCuts').get();
+        const todaysFabricCuts = [];
+        const warpIds = new Set();
+        
+        fabricCutsSnapshot.forEach(doc => {
+            const fabricCutData = doc.data();
+            
+            // Check if has inspection arrival and is today
+            if (!fabricCutData.inspectionArrival) return;
+            
+            const arrivalDate = fabricCutData.inspectionArrival?.toDate ? 
+                fabricCutData.inspectionArrival.toDate() : 
+                new Date(fabricCutData.inspectionArrival);
+            
+            // Check if arrival is today
+            if (arrivalDate >= today && arrivalDate < tomorrow) {
+                const fabricCut = {
+                    id: doc.id,
+                    ...fabricCutData
+                };
+                todaysFabricCuts.push(fabricCut);
+                
+                if (fabricCutData.warpId) {
+                    warpIds.add(fabricCutData.warpId);
+                }
+            }
+        });
+        
+        if (todaysFabricCuts.length === 0) {
+            console.log('No recent inspections found for today');
+            return res.json([]);
+        }
+        
+        // Step 2: Batch fetch all warps and related data in parallel
+        const [warpsMap, ordersMap] = await Promise.all([
+            // Fetch warps
+            (async () => {
+                const warpsMap = new Map();
+                const orderIds = new Set();
+                
+                if (warpIds.size > 0) {
+                    const warpPromises = Array.from(warpIds).map(async (warpId) => {
+                        try {
+                            const warpDoc = await db.collection('warps').doc(warpId).get();
+                            if (warpDoc.exists) {
+                                const warpData = { id: warpDoc.id, ...warpDoc.data() };
+                                warpsMap.set(warpId, warpData);
+                                
+                                if (warpData.orderId) orderIds.add(warpData.orderId);
+                            }
+                        } catch (err) {
+                            console.error(`Error fetching warp ${warpId}:`, err);
+                        }
+                    });
+                    await Promise.all(warpPromises);
+                }
+                
+                return { warpsMap, orderIds };
+            })(),
+            
+            // Pre-initialize orders map
+            Promise.resolve(new Map())
+        ]);
+        
+        // Step 3: Fetch orders in parallel
+        const ordersMapFinal = new Map();
+        if (warpsMap.orderIds && warpsMap.orderIds.size > 0) {
+            const orderPromises = Array.from(warpsMap.orderIds).map(async (orderId) => {
+                try {
+                    const orderDoc = await db.collection('orders').doc(orderId).get();
+                    if (orderDoc.exists) {
+                        ordersMapFinal.set(orderId, {
+                            id: orderDoc.id,
+                            ...orderDoc.data()
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Error fetching order ${orderId}:`, err);
+                }
+            });
+            await Promise.all(orderPromises);
+        }
+        
+        // Step 4: Assemble the final response
+        const enrichedFabricCuts = todaysFabricCuts.map(fabricCutData => {
+            const warp = warpsMap.warpsMap.get(fabricCutData.warpId);
+            let enrichedWarp = null;
+            
+            if (warp) {
+                enrichedWarp = {
+                    ...warp,
+                    order: warp.orderId ? ordersMapFinal.get(warp.orderId) : null
+                };
+            }
+            
+            return {
+                ...fabricCutData,
+                warp: enrichedWarp
+            };
+        });
+        
+        // Sort by inspection arrival time (newest first)
+        enrichedFabricCuts.sort((a, b) => {
+            const dateA = a.inspectionArrival?.toDate ? a.inspectionArrival.toDate() : new Date(a.inspectionArrival);
+            const dateB = b.inspectionArrival?.toDate ? b.inspectionArrival.toDate() : new Date(b.inspectionArrival);
+            return dateB.getTime() - dateA.getTime();
+        });
+        
+        const totalTime = Date.now() - startTime;
+        console.log(`Ultra-fast recent inspections query completed in ${totalTime}ms for ${enrichedFabricCuts.length} fabric cuts`);
+        
+        res.json(enrichedFabricCuts);
+    } catch (err) {
+        console.error('Error fetching recent inspection arrivals:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // Get recent inspection arrivals (today) - OPTIMIZED VERSION
 router.get('/recent-inspections', async (req, res) => {
     try {
@@ -1073,6 +1385,201 @@ router.get('/by-qr/:qrCode', async (req, res) => {
     }
 });
 
+// Generate print summary for search results
+router.get('/print-summary', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        const { search = '' } = req.query;
+        
+        console.log(`Generating print summary for search: "${search}"`);
+        const startTime = Date.now();
+        
+        // Get all fabric cuts with inspection arrival
+        const fabricCutsSnapshot = await db.collection('fabricCuts').get();
+        const scannedFabricCuts = [];
+        const warpIds = new Set();
+        
+        fabricCutsSnapshot.forEach(doc => {
+            const fabricCutData = doc.data();
+            // Only include fabric cuts that have been scanned for loom-in
+            if (fabricCutData.inspectionArrival) {
+                const fabricCut = {
+                    id: doc.id,
+                    ...fabricCutData
+                };
+                
+                // Apply search filter if provided
+                if (search.trim() !== '') {
+                    const searchTerm = search.toLowerCase();
+                    const fabricNumber = fabricCut.fabricNumber?.toLowerCase() || '';
+                    const qrData = `${fabricCut.warp?.warpNumber || 'unknown'}/${String(fabricCut.cutNumber || '').padStart(2, '0')}`.toLowerCase();
+                    
+                    if (fabricNumber.includes(searchTerm) || 
+                        qrData.includes(searchTerm) ||
+                        fabricCut.warp?.warpNumber?.toLowerCase().includes(searchTerm) ||
+                        fabricCut.warp?.warpOrderNumber?.toLowerCase().includes(searchTerm)) {
+                        scannedFabricCuts.push(fabricCut);
+                        if (fabricCutData.warpId) {
+                            warpIds.add(fabricCutData.warpId);
+                        }
+                    }
+                } else {
+                    scannedFabricCuts.push(fabricCut);
+                    if (fabricCutData.warpId) {
+                        warpIds.add(fabricCutData.warpId);
+                    }
+                }
+            }
+        });
+        
+        if (scannedFabricCuts.length === 0) {
+            return res.json({
+                summary: {
+                    totalFabricCuts: 0,
+                    totalQuantity: 0,
+                    dateRange: null,
+                    searchTerm: search
+                },
+                fabricCuts: []
+            });
+        }
+        
+        // Batch fetch all warps in parallel
+        const warpsMap = new Map();
+        const orderIds = new Set();
+        const loomIds = new Set();
+        
+        if (warpIds.size > 0) {
+            const warpPromises = Array.from(warpIds).map(async (warpId) => {
+                try {
+                    const warpDoc = await db.collection('warps').doc(warpId).get();
+                    if (warpDoc.exists) {
+                        const warpData = { id: warpDoc.id, ...warpDoc.data() };
+                        warpsMap.set(warpId, warpData);
+                        
+                        if (warpData.orderId) orderIds.add(warpData.orderId);
+                        if (warpData.loomId) loomIds.add(warpData.loomId);
+                    }
+                } catch (err) {
+                    console.error(`Error fetching warp ${warpId}:`, err);
+                }
+            });
+            await Promise.all(warpPromises);
+        }
+        
+        // Batch fetch orders and looms in parallel
+        const [ordersMap, loomsMap] = await Promise.all([
+            // Fetch orders
+            (async () => {
+                const ordersMap = new Map();
+                if (orderIds.size > 0) {
+                    const orderPromises = Array.from(orderIds).map(async (orderId) => {
+                        try {
+                            const orderDoc = await db.collection('orders').doc(orderId).get();
+                            if (orderDoc.exists) {
+                                ordersMap.set(orderId, {
+                                    id: orderDoc.id,
+                                    ...orderDoc.data()
+                                });
+                            }
+                        } catch (err) {
+                            console.error(`Error fetching order ${orderId}:`, err);
+                        }
+                    });
+                    await Promise.all(orderPromises);
+                }
+                return ordersMap;
+            })(),
+            
+            // Fetch looms
+            (async () => {
+                const loomsMap = new Map();
+                if (loomIds.size > 0) {
+                    const loomPromises = Array.from(loomIds).map(async (loomId) => {
+                        try {
+                            const loomDoc = await db.collection('looms').doc(loomId).get();
+                            if (loomDoc.exists) {
+                                loomsMap.set(loomId, {
+                                    id: loomDoc.id,
+                                    ...loomDoc.data()
+                                });
+                            }
+                        } catch (err) {
+                            console.error(`Error fetching loom ${loomId}:`, err);
+                        }
+                    });
+                    await Promise.all(loomPromises);
+                }
+                return loomsMap;
+            })()
+        ]);
+        
+        // Assemble the final response with enriched data
+        const enrichedFabricCuts = scannedFabricCuts.map(fabricCutData => {
+            const warp = warpsMap.get(fabricCutData.warpId);
+            let enrichedWarp = null;
+            
+            if (warp) {
+                let loomData = warp.loomId ? loomsMap.get(warp.loomId) : null;
+                
+                // If loom was deleted but we have stored loom data in fabric cut, use that
+                if (!loomData && warp.loomId && (fabricCutData.loomName || fabricCutData.companyName)) {
+                    loomData = {
+                        id: warp.loomId,
+                        loomName: fabricCutData.loomName || 'N/A',
+                        companyName: fabricCutData.companyName || 'N/A'
+                    };
+                }
+                
+                enrichedWarp = {
+                    ...warp,
+                    order: warp.orderId ? ordersMap.get(warp.orderId) : null,
+                    loom: loomData
+                };
+            }
+            
+            return {
+                ...fabricCutData,
+                warp: enrichedWarp
+            };
+        });
+        
+        // Sort by inspection arrival time (newest first)
+        enrichedFabricCuts.sort((a, b) => {
+            const dateA = a.inspectionArrival?.toDate ? a.inspectionArrival.toDate() : new Date(a.inspectionArrival);
+            const dateB = b.inspectionArrival?.toDate ? b.inspectionArrival.toDate() : new Date(b.inspectionArrival);
+            return dateB.getTime() - dateA.getTime();
+        });
+        
+        // Calculate summary statistics
+        const totalQuantity = enrichedFabricCuts.reduce((sum, cut) => sum + (cut.quantity || 0), 0);
+        const dates = enrichedFabricCuts.map(cut => {
+            return cut.inspectionArrival?.toDate ? cut.inspectionArrival.toDate() : new Date(cut.inspectionArrival);
+        });
+        const dateRange = dates.length > 0 ? {
+            from: new Date(Math.min(...dates)),
+            to: new Date(Math.max(...dates))
+        } : null;
+        
+        const totalTime = Date.now() - startTime;
+        console.log(`Print summary generated in ${totalTime}ms for ${enrichedFabricCuts.length} fabric cuts`);
+        
+        res.json({
+            summary: {
+                totalFabricCuts: enrichedFabricCuts.length,
+                totalQuantity,
+                dateRange,
+                searchTerm: search,
+                generatedAt: new Date()
+            },
+            fabricCuts: enrichedFabricCuts
+        });
+    } catch (err) {
+        console.error('Error generating print summary:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // Get single fabric cut
 router.get('/:id', async (req, res) => {
     try {
@@ -1252,6 +1759,150 @@ router.patch('/:id/inspection-arrival', async (req, res) => {
         });
     } catch (err) {
         console.error('Error marking inspection arrival:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Check if fabric cut has sub-cuts (to prevent cutting already cut fabrics)
+router.get('/check-sub-cuts/:fabricId', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        const { fabricId } = req.params;
+        
+        // Check if this fabric has been used as a parent for sub-cuts
+        const subCutsSnapshot = await db.collection('fabricCuts').get();
+        
+        let hasSubCuts = false;
+        subCutsSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.parentFabricId === fabricId) {
+                hasSubCuts = true;
+            }
+        });
+        
+        res.json({ hasSubCuts });
+    } catch (err) {
+        console.error('Error checking sub-cuts:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Split fabric into multiple pieces
+router.post('/split-fabric', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        const { originalFabricId, cutQuantities } = req.body;
+        
+        if (!originalFabricId || !cutQuantities || cutQuantities.length < 2) {
+            return res.status(400).json({ message: 'Invalid request data' });
+        }
+        
+        // Get the original fabric cut
+        const originalFabricDoc = await db.collection('fabricCuts').doc(originalFabricId).get();
+        if (!originalFabricDoc.exists) {
+            return res.status(404).json({ message: 'Original fabric cut not found' });
+        }
+        
+        const originalFabric = originalFabricDoc.data();
+        
+        // Validate that total cut quantities equal original quantity
+        const totalCutQuantity = cutQuantities.reduce((sum, qty) => sum + parseFloat(qty), 0);
+        if (Math.abs(totalCutQuantity - originalFabric.quantity) > 0.01) {
+            return res.status(400).json({ 
+                message: 'Total cut quantities must equal original fabric quantity' 
+            });
+        }
+        
+        // Get warp and order information
+        const warpDoc = await db.collection('warps').doc(originalFabric.warpId).get();
+        if (!warpDoc.exists) {
+            return res.status(404).json({ message: 'Associated warp not found' });
+        }
+        
+        const warp = warpDoc.data();
+        const orderDoc = await db.collection('orders').doc(warp.orderId).get();
+        if (!orderDoc.exists) {
+            return res.status(404).json({ message: 'Associated order not found' });
+        }
+        
+        const order = orderDoc.data();
+        
+        // Get loom information
+        let loomData = null;
+        if (warp.loomId) {
+            const loomDoc = await db.collection('looms').doc(warp.loomId).get();
+            if (loomDoc.exists) {
+                loomData = loomDoc.data();
+            }
+        }
+        
+        // Create new fabric cuts with sub-numbering
+        const newFabricCuts = [];
+        const batch = db.batch();
+        
+        for (let i = 0; i < cutQuantities.length; i++) {
+            const subCutNumber = i + 1;
+            const newCutNumber = `${originalFabric.cutNumber}/${String(subCutNumber).padStart(2, '0')}`;
+            const fabricNumber = `${warp.warpNumber || warp.warpOrderNumber || 'UNKNOWN'}-${newCutNumber}`;
+            const qrData = `${warp.warpNumber || warp.warpOrderNumber || 'UNKNOWN'}/${newCutNumber}`;
+            
+            const qrCode = await QRCode.toDataURL(qrData);
+            
+            const newFabricCutData = {
+                fabricNumber,
+                warpId: originalFabric.warpId,
+                quantity: parseFloat(cutQuantities[i]),
+                cutNumber: newCutNumber,
+                parentFabricId: originalFabricId,
+                parentCutNumber: originalFabric.cutNumber,
+                subCutNumber: subCutNumber,
+                totalSubCuts: cutQuantities.length,
+                qrCode,
+                qrCodeData: qrCode, // Store QR code data for printing
+                // Store loom snapshot data for historical preservation
+                loomId: originalFabric.loomId,
+                loomName: originalFabric.loomName || (loomData ? loomData.loomName : null),
+                companyName: originalFabric.companyName || (loomData ? loomData.companyName : null),
+                createdAt: new Date(),
+                // Copy inspection arrival status from parent if it exists
+                inspectionArrival: originalFabric.inspectionArrival || null
+            };
+            
+            const docRef = db.collection('fabricCuts').doc();
+            batch.set(docRef, newFabricCutData);
+            
+            newFabricCuts.push({
+                id: docRef.id,
+                ...newFabricCutData,
+                warp: {
+                    id: warpDoc.id,
+                    ...warp,
+                    order: {
+                        id: orderDoc.id,
+                        ...order
+                    },
+                    loom: loomData ? {
+                        id: warp.loomId,
+                        ...loomData
+                    } : null
+                }
+            });
+        }
+        
+        // Delete the original fabric cut
+        batch.delete(db.collection('fabricCuts').doc(originalFabricId));
+        
+        // Commit all changes
+        await batch.commit();
+        
+        res.status(201).json({
+            message: `Fabric successfully cut into ${cutQuantities.length} pieces`,
+            originalFabricId,
+            newFabricCuts
+        });
+        
+    } catch (err) {
+        console.error('Error splitting fabric:', err);
         res.status(500).json({ message: err.message });
     }
 });

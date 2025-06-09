@@ -267,6 +267,7 @@ router.post('/', upload.fields([
             designName: req.body.designName,
             designNumber: req.body.designNumber,
             orderQuantity: Number(req.body.orderQuantity),
+            warpingQuantity: Number(req.body.warpingQuantity),
             type: req.body.type,
             count: req.body.count,
             construction: req.body.construction,
@@ -274,6 +275,13 @@ router.post('/', upload.fields([
             status: 'NEW', // Default status
             createdAt: new Date()
         };
+
+        // Validate that warping quantity is greater than order quantity
+        if (orderData.warpingQuantity <= orderData.orderQuantity) {
+            return res.status(400).json({ 
+                message: 'Warping quantity must be greater than order quantity to account for shrinkage and wastage' 
+            });
+        }
 
         // Add file information if files were uploaded
         const files = {};
@@ -414,12 +422,20 @@ router.put('/:id', upload.fields([
             designName: req.body.designName,
             designNumber: req.body.designNumber,
             orderQuantity: Number(req.body.orderQuantity),
+            warpingQuantity: Number(req.body.warpingQuantity),
             type: req.body.type,
             count: req.body.count,
             construction: req.body.construction,
             merchandiser: req.body.merchandiser,
             updatedAt: new Date()
         };
+
+        // Validate that warping quantity is greater than order quantity
+        if (updateData.warpingQuantity <= updateData.orderQuantity) {
+            return res.status(400).json({ 
+                message: 'Warping quantity must be greater than order quantity to account for shrinkage and wastage' 
+            });
+        }
 
         // Start with existing files (if any)
         let files = existingOrderData.files || {};
