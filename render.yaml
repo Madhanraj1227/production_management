@@ -2,9 +2,13 @@ services:
   - type: web
     name: fabric-production-tracker
     env: node
-    plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: cd client && npm install && NODE_OPTIONS='--max-old-space-size=2048' npm run build
     startCommand: npm start
+    plan: starter
+    region: oregon
+    branch: main
     envVars:
       - key: NODE_ENV
-        value: production 
+        value: production
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=1024 

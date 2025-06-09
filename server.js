@@ -51,6 +51,16 @@ app.use('/api/looms', loomRoutes);
 app.use('/api/fabric-cuts', fabricCutRoutes);
 app.use('/api/database', databaseRoutes);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    firebase: 'connected'
+  });
+});
+
 // Serve static files from the React app build directory
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'client/build')));
