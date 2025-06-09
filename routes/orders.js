@@ -70,7 +70,8 @@ router.get('/', async (req, res) => {
     try {
         const db = req.app.locals.db;
         const ordersRef = db.collection('orders');
-        const snapshot = await ordersRef.orderBy('createdAt', 'desc').get();
+        // Remove orderBy to avoid index requirement - sort in memory instead
+        const snapshot = await ordersRef.get();
         
         const orders = [];
         snapshot.forEach(doc => {
@@ -80,8 +81,16 @@ router.get('/', async (req, res) => {
             });
         });
         
+        // Sort in memory by createdAt descending
+        orders.sort((a, b) => {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+            return dateB.getTime() - dateA.getTime();
+        });
+        
         res.json(orders);
     } catch (err) {
+        console.error('Error fetching orders:', err);
         res.status(500).json({ message: err.message });
     }
 });
