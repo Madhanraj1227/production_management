@@ -8,8 +8,8 @@
     "dev": "nodemon server.js",
     "client": "cd client && npm start",
     "dev:full": "concurrently \"npm run dev\" \"npm run client\"",
-    "heroku-postbuild": "cd client && npm install && NODE_OPTIONS='--max-old-space-size=2048' npm run build",
-    "build": "cd client && npm install && NODE_OPTIONS='--max-old-space-size=2048' npm run build",
+    "heroku-postbuild": "npm run build",
+    "build": "cd client && npm install && npm run build",
     "start:prod": "NODE_ENV=production npm start",
     "test:prod": "npm run build && npm run start:prod"
   },
@@ -24,11 +24,10 @@
     "path": "^0.12.7"
   },
   "devDependencies": {
-    "concurrently": "^8.2.1",
+    "concurrently": "^8.2.0",
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": "18.x",
-    "npm": "9.x"
+    "node": "18.x"
   }
 }
