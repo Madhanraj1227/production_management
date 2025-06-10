@@ -81,7 +81,8 @@ const LogoImage = styled('img')(({ theme }) => ({
 const DEMO_USERS = [
   { username: 'admin', password: 'admin123', role: 'Admin', fullAccess: true },
   { username: 'fabric', password: 'fabric123', role: 'Fabric Manager', fabricAccess: true },
-  { username: 'yarn', password: 'yarn123', role: 'Yarn Manager', yarnOnly: true }
+  { username: 'yarn', password: 'yarn123', role: 'Yarn Manager', yarnOnly: true },
+  { username: 'Iinso', password: 'insp123', role: 'Fabric Inspector', inspectionAccess: true }
 ];
 
 function Login({ onLogin }) {
@@ -124,6 +125,7 @@ function Login({ onLogin }) {
         fullAccess: user.fullAccess || false,
         fabricAccess: user.fabricAccess || false,
         yarnOnly: user.yarnOnly || false,
+        inspectionAccess: user.inspectionAccess || false,
         loginTime: new Date().toISOString()
       };
       
@@ -252,6 +254,9 @@ function Login({ onLogin }) {
             </Typography>
             <Typography variant="caption" display="block" align="center">
               • yarn / yarn123 (Yarn Manager)
+            </Typography>
+            <Typography variant="caption" display="block" align="center">
+              • Iinso / insp123 (Fabric Inspector)
             </Typography>
           </Box>
         </StyledPaper>

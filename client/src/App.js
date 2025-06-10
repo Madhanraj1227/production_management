@@ -22,6 +22,10 @@ import WarpList from './components/WarpList';
 import FabricCutList from './components/FabricCutList';
 import LoomList from './components/LoomList';
 import LoomIn from './components/LoomIn';
+import InspectionDashboard from './components/InspectionDashboard';
+import FourPointInspection from './components/FourPointInspection';
+import UnwashedInspection from './components/UnwashedInspection';
+import WashedInspection from './components/WashedInspection';
 
 const theme = createTheme({
   palette: {
@@ -127,6 +131,16 @@ function App() {
                 <Route path="/yarn/inventory" element={<YarnInventory />} />
                 {/* Redirect any unknown paths to dashboard for yarn users */}
                 <Route path="*" element={<Dashboard user={user} />} />
+              </>
+            ) : user?.inspectionAccess ? (
+              <>
+                <Route path="/" element={<InspectionDashboard user={user} />} />
+                <Route path="/inspection" element={<InspectionDashboard user={user} />} />
+                <Route path="/inspection/four-point" element={<FourPointInspection />} />
+                <Route path="/inspection/unwashed" element={<UnwashedInspection />} />
+                <Route path="/inspection/washed" element={<WashedInspection />} />
+                {/* Redirect any unknown paths to inspection dashboard */}
+                <Route path="*" element={<InspectionDashboard user={user} />} />
               </>
             ) : (
               <>

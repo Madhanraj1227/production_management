@@ -81,6 +81,7 @@ const warpRoutes = require('./routes/warps');
 const loomRoutes = require('./routes/looms');
 const fabricCutRoutes = require('./routes/fabricCuts');
 const databaseRoutes = require('./routes/database');
+const inspectionRoutes = require('./routes/inspections');
 
 // Use routes
 app.use('/api/orders', orderRoutes);
@@ -88,6 +89,7 @@ app.use('/api/warps', warpRoutes);
 app.use('/api/looms', loomRoutes);
 app.use('/api/fabric-cuts', fabricCutRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/inspections', inspectionRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
