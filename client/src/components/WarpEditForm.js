@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function WarpEditForm() {
   const { id } = useParams();
@@ -68,12 +69,12 @@ function WarpEditForm() {
         setError('');
 
         // Fetch warp details
-        const warpResponse = await axios.get(`http://localhost:3001/api/warps/${id}`);
+        const warpResponse = await axios.get(buildApiUrl(`warps/${id}`));
         const warpData = warpResponse.data;
         setWarp(warpData);
 
         // Fetch available looms
-        const loomsResponse = await axios.get('http://localhost:3001/api/looms');
+        const loomsResponse = await axios.get(buildApiUrl('looms'));
         setLooms(loomsResponse.data);
 
         // Set form data with proper date formatting
@@ -139,7 +140,7 @@ function WarpEditForm() {
         endDate: new Date(formData.endDate).toISOString(),
       };
 
-      await axios.patch(`http://localhost:3001/api/warps/${id}`, updateData);
+      await axios.patch(buildApiUrl(`warps/${id}`), updateData);
       
       setSuccess('Warp updated successfully!');
       setTimeout(() => {

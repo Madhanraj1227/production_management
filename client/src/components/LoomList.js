@@ -31,6 +31,7 @@ import {
   Cancel as CancelIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function LoomList() {
   const navigate = useNavigate();
@@ -54,7 +55,7 @@ function LoomList() {
 
   const fetchLooms = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/looms');
+      const response = await axios.get(buildApiUrl('looms'));
       console.log('Looms data:', response.data);
       setLooms(response.data);
     } catch (error) {
@@ -87,7 +88,7 @@ function LoomList() {
 
   const handleSaveEdit = async (loomId) => {
     try {
-      const response = await axios.put(`http://localhost:3001/api/looms/${loomId}`, editData);
+      const response = await axios.put(buildApiUrl(`looms/${loomId}`), editData);
       
       // Update the looms list with the updated loom
       setLooms(looms.map(loom => 
@@ -113,7 +114,7 @@ function LoomList() {
     if (!loomToDelete) return;
     
     try {
-      await axios.delete(`http://localhost:3001/api/looms/${loomToDelete.id}`);
+      await axios.delete(buildApiUrl(`looms/${loomToDelete.id}`));
       
       // Remove the deleted loom from the list
       setLooms(looms.filter(loom => loom.id !== loomToDelete.id));

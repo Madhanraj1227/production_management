@@ -23,6 +23,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import PrintIcon from '@mui/icons-material/Print';
 import SearchIcon from '@mui/icons-material/Search';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function FabricCutForm() {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ function FabricCutForm() {
   useEffect(() => {
     const fetchWarps = async () => {
       try {
-        const response = await axios.get('http://localhost:3001/api/warps/active');
+        const response = await axios.get(buildApiUrl('warps/active'));
         setWarps(response.data);
       } catch (error) {
         console.error('Error fetching active warps:', error);
@@ -55,7 +56,7 @@ function FabricCutForm() {
 
   const fetchExistingFabricCuts = async (warpId) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/fabric-cuts/by-warp/${warpId}`);
+      const response = await axios.get(buildApiUrl(`fabric-cuts/by-warp/${warpId}`));
       setExistingFabricCuts(response.data);
       const totalQuantity = response.data.reduce((sum, cut) => sum + cut.quantity, 0);
       setTotalExistingQuantity(totalQuantity);
@@ -113,7 +114,7 @@ function FabricCutForm() {
     }
 
     try {
-      const response = await axios.post('http://localhost:3001/api/fabric-cuts', {
+      const response = await axios.post(buildApiUrl('fabric-cuts'), {
         warpId: selectedWarp,
         fabricCuts: fabricCuts.map(cut => ({ quantity: Number(cut.quantity) }))
       });

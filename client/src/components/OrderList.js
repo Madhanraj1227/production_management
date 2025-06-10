@@ -44,6 +44,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function OrderList() {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ function OrderList() {
 
   const fetchOrders = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/orders');
+      const response = await axios.get(buildApiUrl('orders'));
       setOrders(response.data);
       setAllOrders(response.data); // Store all orders for filtering
     } catch (error) {
@@ -192,7 +193,7 @@ function OrderList() {
 
   const handleDownload = async (orderId, fileType) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/orders/${orderId}/download/${fileType}`, {
+      const response = await axios.get(buildApiUrl(`orders/${orderId}/download/${fileType}`), {
         responseType: 'blob',
       });
       
@@ -243,7 +244,7 @@ function OrderList() {
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
-      await axios.patch(`http://localhost:3001/api/orders/${orderId}/status`, {
+      await axios.patch(buildApiUrl(`orders/${orderId}/status`), {
         status: newStatus
       });
       fetchOrders(); // Refresh the list
@@ -289,7 +290,7 @@ function OrderList() {
       console.log('Form data fields:', Object.keys(editFormData));
       console.log('Files to upload:', Object.keys(files));
 
-      const response = await axios.put(`http://localhost:3001/api/orders/${selectedOrder.id}`, formData, {
+      const response = await axios.put(buildApiUrl(`orders/${selectedOrder.id}`), formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -421,7 +422,7 @@ function OrderList() {
 
   const fetchProductionData = async (orderId) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/fabric-cuts/by-order/${orderId}`);
+      const response = await axios.get(buildApiUrl(`fabric-cuts/by-order/${orderId}`));
       return response.data;
     } catch (error) {
       console.error('Error fetching production data:', error);

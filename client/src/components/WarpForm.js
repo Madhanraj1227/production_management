@@ -23,6 +23,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function WarpForm() {
   const navigate = useNavigate();
@@ -48,8 +49,8 @@ function WarpForm() {
         setLoading(true);
         console.log('Fetching orders and looms...');
         const [ordersResponse, loomsResponse] = await Promise.all([
-          axios.get('http://localhost:3001/api/orders/active'),
-          axios.get('http://localhost:3001/api/looms/idle')
+          axios.get(buildApiUrl('orders/active')),
+          axios.get(buildApiUrl('looms/idle'))
         ]);
         console.log('Orders response:', ordersResponse.data);
         console.log('Looms response:', loomsResponse.data);
@@ -82,10 +83,10 @@ function WarpForm() {
       setSelectedOrder(order);
       
       // Fetch existing warps for this order and available quantity
-      const [warpsResponse, quantityResponse] = await Promise.all([
-        axios.get(`http://localhost:3001/api/warps/by-order/${orderId}`),
-        axios.get(`http://localhost:3001/api/warps/available-quantity/${orderId}`)
-      ]);
+              const [warpsResponse, quantityResponse] = await Promise.all([
+          axios.get(buildApiUrl(`warps/by-order/${orderId}`)),
+          axios.get(buildApiUrl(`warps/available-quantity/${orderId}`))
+        ]);
       
       setExistingWarps(warpsResponse.data);
       setAvailableQuantity(quantityResponse.data);
@@ -140,7 +141,7 @@ function WarpForm() {
     
     try {
       // Create the warp
-      await axios.post('http://localhost:3001/api/warps', {
+      await axios.post(buildApiUrl('warps'), {
         ...formData,
         quantity: requestedQuantity,
         startDate: formData.startDate ? formData.startDate.toISOString() : null,
@@ -149,7 +150,7 @@ function WarpForm() {
       
       // Update loom status to busy
       if (formData.loomId) {
-        await axios.patch(`http://localhost:3001/api/looms/${formData.loomId}`, {
+        await axios.patch(buildApiUrl(`looms/${formData.loomId}`), {
           status: 'busy'
         });
       }

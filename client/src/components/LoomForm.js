@@ -9,6 +9,7 @@ import {
   Box,
 } from '@mui/material';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function LoomForm() {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ function LoomForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:3001/api/looms', formData);
+      await axios.post(buildApiUrl('looms'), formData);
       navigate('/looms');
     } catch (error) {
       console.error('Error creating loom:', error);

@@ -30,6 +30,7 @@ import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 // Styled Components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -213,7 +214,7 @@ function OrderForm() {
 
       setUploadStatus({ uploading: true });
       
-      const response = await axios.post('http://localhost:3001/api/orders', formDataToSend, {
+      const response = await axios.post(buildApiUrl('orders'), formDataToSend, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

@@ -39,10 +39,10 @@ function Dashboard({ user }) {
   const fetchCounts = async () => {
     try {
       const [ordersRes, warpsRes, fabricCutsRes, loomInRes] = await Promise.all([
-        fetch('/api/orders/count/active'),
-        fetch('/api/warps/count/active'),
-        fetch('/api/fabric-cuts/pending-inspection-count'),
-        fetch('/api/fabric-cuts/recent-inspections')
+        fetch(buildApiUrl('orders/count/active')),
+        fetch(buildApiUrl('warps/count/active')),
+        fetch(buildApiUrl('fabric-cuts/pending-inspection-count')),
+        fetch(buildApiUrl('fabric-cuts/recent-inspections'))
       ]);
 
       const ordersData = await ordersRes.json();

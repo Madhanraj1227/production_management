@@ -30,6 +30,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, FilterList as FilterListIcon, Clear as ClearIcon } from '@mui/icons-material';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function WarpList() {
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ function WarpList() {
         const startTime = Date.now();
         
         // Use the ultra-optimized endpoint for best performance
-        const response = await axios.get('http://localhost:3001/api/warps/ultra-optimized');
+        const response = await axios.get(buildApiUrl('warps/ultra-optimized'));
         console.log(`Warps data received in ${Date.now() - startTime}ms:`, response.data.length, 'warps');
         
         setWarps(response.data);
@@ -85,7 +86,7 @@ function WarpList() {
     setTimeout(() => {
       const fetchWarps = async () => {
         try {
-          const response = await axios.get('http://localhost:3001/api/warps/ultra-optimized');
+          const response = await axios.get(buildApiUrl('warps/ultra-optimized'));
           setWarps(response.data);
           setError('');
         } catch (error) {
@@ -233,12 +234,12 @@ function WarpList() {
     }
 
     try {
-      await axios.patch(`http://localhost:3001/api/warps/${warpId}`, {
+      await axios.patch(buildApiUrl(`warps/${warpId}`), {
         status: newStatus
       });
       
       // Refresh the warps list using the ultra-optimized endpoint
-      const response = await axios.get('http://localhost:3001/api/warps/ultra-optimized');
+      const response = await axios.get(buildApiUrl('warps/ultra-optimized'));
       setWarps(response.data);
     } catch (error) {
       console.error('Error updating warp status:', error);
@@ -264,14 +265,14 @@ function WarpList() {
     }
 
     try {
-      await axios.patch(`http://localhost:3001/api/warps/${selectedWarpForStop.id}`, {
+      await axios.patch(buildApiUrl(`warps/${selectedWarpForStop.id}`), {
         status: 'stopped',
         remainingQuantity: remaining,
         originalQuantity: selectedWarpForStop.quantity
       });
       
       // Refresh the warps list
-      const response = await axios.get('http://localhost:3001/api/warps/ultra-optimized');
+      const response = await axios.get(buildApiUrl('warps/ultra-optimized'));
       setWarps(response.data);
       
       // Close dialog and reset states

@@ -40,6 +40,7 @@ import {
   Cancel as CancelIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { buildApiUrl } from '../config/api';
 
 function FabricCutList() {
   const navigate = useNavigate();
@@ -91,7 +92,7 @@ function FabricCutList() {
       setError('');
       console.log('Fetching fabric cuts with optimization...');
       
-      let url = 'http://localhost:3001/api/fabric-cuts/optimized';
+      let url = buildApiUrl('fabric-cuts/optimized');
       const params = new URLSearchParams();
       
       if (warpFilter) {
@@ -332,7 +333,7 @@ function FabricCutList() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3001/api/fabric-cuts/${editingCut.id}`, {
+              const response = await fetch(buildApiUrl(`fabric-cuts/${editingCut.id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -384,7 +385,7 @@ function FabricCutList() {
     if (!deletingCut) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/fabric-cuts/${deletingCut.id}`, {
+              const response = await fetch(buildApiUrl(`fabric-cuts/${deletingCut.id}`), {
         method: 'DELETE'
       });
 

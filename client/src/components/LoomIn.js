@@ -166,7 +166,7 @@ const LoomIn = () => {
         setHistoryLoading(true);
         try {
             // Use the ultra-optimized endpoint for better performance
-            const response = await fetch('/api/fabric-cuts/loom-in-history-ultra-fast');
+            const response = await fetch(buildApiUrl('fabric-cuts/loom-in-history-ultra-fast'));
             if (response.ok) {
                 const data = await response.json();
                 const historyArray = data.fabricCuts || [];
@@ -252,7 +252,7 @@ const LoomIn = () => {
             }
 
             // Fetch fabric cut details
-            const response = await fetch(`/api/fabric-cuts/by-qr/${encodeURIComponent(qrCode)}`);
+            const response = await fetch(buildApiUrl('fabric-cuts/by-qr/${encodeURIComponent(qrCode)}'));
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Fabric cut not found');
@@ -261,7 +261,7 @@ const LoomIn = () => {
             const fabricCut = await response.json();
             
             // Check if fabric has already been cut (has sub-cuts)
-            const checkSubCutsResponse = await fetch(`/api/fabric-cuts/check-sub-cuts/${fabricCut.id}`);
+            const checkSubCutsResponse = await fetch(buildApiUrl('fabric-cuts/check-sub-cuts/${fabricCut.id}'));
             if (checkSubCutsResponse.ok) {
                 const subCutsData = await checkSubCutsResponse.json();
                 if (subCutsData.hasSubCuts) {
@@ -315,7 +315,7 @@ const LoomIn = () => {
         setError('');
 
         try {
-            const response = await fetch('/api/fabric-cuts/split-fabric', {
+            const response = await fetch(buildApiUrl('fabric-cuts/split-fabric'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -526,7 +526,7 @@ const LoomIn = () => {
 
     const fetchPendingCount = async () => {
         try {
-            const response = await fetch('/api/fabric-cuts/pending-inspection-count');
+            const response = await fetch(buildApiUrl('fabric-cuts/pending-inspection-count'));
             if (response.ok) {
                 const data = await response.json();
                 setPendingCount(data.count);
@@ -553,7 +553,7 @@ const LoomIn = () => {
         try {
             console.log('Fetching recent scans...');
             // Use ultra-optimized endpoint for better performance
-            const response = await fetch('/api/fabric-cuts/recent-inspections-ultra-fast');
+            const response = await fetch(buildApiUrl('fabric-cuts/recent-inspections-ultra-fast'));
             console.log('Recent scans response status:', response.status);
             
             if (response.ok) {
@@ -602,8 +602,8 @@ const LoomIn = () => {
                 return;
             }
 
-            console.log('Making API call to:', `/api/fabric-cuts/by-qr/${encodeURIComponent(qrCode)}`);
-            const response = await fetch(`/api/fabric-cuts/by-qr/${encodeURIComponent(qrCode)}`);
+            console.log('Making API call to:', buildApiUrl('fabric-cuts/by-qr/${encodeURIComponent(qrCode)}'));
+            const response = await fetch(buildApiUrl('fabric-cuts/by-qr/${encodeURIComponent(qrCode)}'));
             console.log('Response status:', response.status);
             
             if (response.ok) {
@@ -693,7 +693,7 @@ const LoomIn = () => {
 
         try {
             const promises = scannedFabricCuts.map(fabricCut => 
-                fetch(`/api/fabric-cuts/${fabricCut.id}/inspection-arrival`, {
+                fetch(buildApiUrl('fabric-cuts/${fabricCut.id}/inspection-arrival'), {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1155,7 +1155,7 @@ const LoomIn = () => {
         try {
             setHistoryLoading(true);
             const searchParam = filters.searchText ? `?search=${encodeURIComponent(filters.searchText)}` : '';
-            const response = await fetch(`/api/fabric-cuts/print-summary${searchParam}`);
+            const response = await fetch(buildApiUrl('fabric-cuts/print-summary${searchParam}'));
             
             if (!response.ok) {
                 throw new Error('Failed to generate print summary');
