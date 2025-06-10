@@ -44,6 +44,7 @@ import {
     Refresh as RefreshIcon,
     PrintOutlined as PrintOutlinedIcon
 } from '@mui/icons-material';
+import { buildApiUrl } from '../config/api';
 
 const LoomIn = () => {
     const { view } = useParams(); // Get view parameter from URL
@@ -252,7 +253,7 @@ const LoomIn = () => {
             }
 
             // Fetch fabric cut details
-            const response = await fetch(buildApiUrl('fabric-cuts/by-qr/${encodeURIComponent(qrCode)}'));
+            const response = await fetch(buildApiUrl(`fabric-cuts/by-qr/${encodeURIComponent(qrCode)}`));
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Fabric cut not found');
@@ -261,7 +262,7 @@ const LoomIn = () => {
             const fabricCut = await response.json();
             
             // Check if fabric has already been cut (has sub-cuts)
-            const checkSubCutsResponse = await fetch(buildApiUrl('fabric-cuts/check-sub-cuts/${fabricCut.id}'));
+            const checkSubCutsResponse = await fetch(buildApiUrl(`fabric-cuts/check-sub-cuts/${fabricCut.id}`));
             if (checkSubCutsResponse.ok) {
                 const subCutsData = await checkSubCutsResponse.json();
                 if (subCutsData.hasSubCuts) {
@@ -602,8 +603,8 @@ const LoomIn = () => {
                 return;
             }
 
-            console.log('Making API call to:', buildApiUrl('fabric-cuts/by-qr/${encodeURIComponent(qrCode)}'));
-            const response = await fetch(buildApiUrl('fabric-cuts/by-qr/${encodeURIComponent(qrCode)}'));
+            console.log('Making API call to:', buildApiUrl(`fabric-cuts/by-qr/${encodeURIComponent(qrCode)}`));
+            const response = await fetch(buildApiUrl(`fabric-cuts/by-qr/${encodeURIComponent(qrCode)}`));
             console.log('Response status:', response.status);
             
             if (response.ok) {
@@ -693,7 +694,7 @@ const LoomIn = () => {
 
         try {
             const promises = scannedFabricCuts.map(fabricCut => 
-                fetch(buildApiUrl('fabric-cuts/${fabricCut.id}/inspection-arrival'), {
+                fetch(buildApiUrl(`fabric-cuts/${fabricCut.id}/inspection-arrival`), {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1155,7 +1156,7 @@ const LoomIn = () => {
         try {
             setHistoryLoading(true);
             const searchParam = filters.searchText ? `?search=${encodeURIComponent(filters.searchText)}` : '';
-            const response = await fetch(buildApiUrl('fabric-cuts/print-summary${searchParam}'));
+            const response = await fetch(buildApiUrl(`fabric-cuts/print-summary${searchParam}`));
             
             if (!response.ok) {
                 throw new Error('Failed to generate print summary');
