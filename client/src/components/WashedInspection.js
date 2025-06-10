@@ -78,7 +78,7 @@ function WashedInspection() {
     shrinkagePercentage: '',
     colorFastness: '',
     inspectorNotes: '',
-    inspectedBy: 'Iinso'
+    inspectedBy: 'insp'
   });
 
   const [loading, setLoading] = useState(false);

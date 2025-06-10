@@ -82,7 +82,7 @@ const DEMO_USERS = [
   { username: 'admin', password: 'admin123', role: 'Admin', fullAccess: true },
   { username: 'fabric', password: 'fabric123', role: 'Fabric Manager', fabricAccess: true },
   { username: 'yarn', password: 'yarn123', role: 'Yarn Manager', yarnOnly: true },
-  { username: 'Iinso', password: 'insp123', role: 'Fabric Inspector', inspectionAccess: true }
+  { username: 'insp', password: 'insp123', role: 'Fabric Inspector', inspectionAccess: true }
 ];
 
 function Login({ onLogin }) {
@@ -256,7 +256,7 @@ function Login({ onLogin }) {
               • yarn / yarn123 (Yarn Manager)
             </Typography>
             <Typography variant="caption" display="block" align="center">
-              • Iinso / insp123 (Fabric Inspector)
+              • insp / insp123 (Fabric Inspector)
             </Typography>
           </Box>
         </StyledPaper>

@@ -77,7 +77,7 @@ function FourPointInspection() {
     defectType: '',
     pointsAssigned: '',
     inspectorNotes: '',
-    inspectedBy: 'Iinso'
+    inspectedBy: 'insp'
   });
 
   const [loading, setLoading] = useState(false);

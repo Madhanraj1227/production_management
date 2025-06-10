@@ -76,7 +76,7 @@ function UnwashedInspection() {
     mistakeDescription: '',
     defectType: '',
     inspectorNotes: '',
-    inspectedBy: 'Iinso'
+    inspectedBy: 'insp'
   });
 
   const [loading, setLoading] = useState(false);
