@@ -1341,37 +1341,36 @@ router.get('/by-qr/:qrCode', async (req, res) => {
             return res.status(400).json({ message: 'Invalid cut or split number in QR code' });
         }
         
-        // Find fabric cut by fabricNumber pattern - try multiple patterns
-        let fabricNumber1, fabricNumber2, fabricNumber3, fabricNumber4, fabricNumber5, fabricNumber6;
+        // Find fabric cut by fabricNumber pattern - try multiple comprehensive patterns
+        const searchPatterns = [];
         
         if (splitNumber) {
-            // For split fabric cuts: W1/4/01 -> patterns like W1-4-01, W1-4/01, etc.
-            fabricNumber1 = `${warpNumber}-${parsedCutNumber}-${String(parsedSplitNumber).padStart(2, '0')}`; // W1-4-01
-            fabricNumber2 = `${warpNumber}-${parsedCutNumber}-${parsedSplitNumber}`; // W1-4-1
-            fabricNumber3 = `${warpNumber}/${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`; // W1/4/01
-            fabricNumber4 = `${warpNumber}/${parsedCutNumber}/${parsedSplitNumber}`; // W1/4/1
-            // Add the actual format found in database: W1-4/02
-            fabricNumber5 = `${warpNumber}-${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`; // W1-4/02
-            fabricNumber6 = `${warpNumber}-${parsedCutNumber}/${parsedSplitNumber}`; // W1-4/2
+            // For split fabric cuts: W1/5/01 input
+            // Database stores: W1-5/01 format 
+            searchPatterns.push(
+                `${warpNumber}-${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`, // W1-5/01 (PRIMARY MATCH)
+                `${warpNumber}-${parsedCutNumber}/${parsedSplitNumber}`, // W1-5/1
+                `${warpNumber}-${String(parsedCutNumber).padStart(2, '0')}/${String(parsedSplitNumber).padStart(2, '0')}`, // W1-05/01
+                `${warpNumber}-${String(parsedCutNumber).padStart(2, '0')}/${parsedSplitNumber}`, // W1-05/1
+                `${warpNumber}/${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`, // W1/5/01
+                `${warpNumber}/${parsedCutNumber}/${parsedSplitNumber}`, // W1/5/1
+                `${warpNumber}-${parsedCutNumber}-${String(parsedSplitNumber).padStart(2, '0')}`, // W1-5-01
+                `${warpNumber}-${parsedCutNumber}-${parsedSplitNumber}` // W1-5-1
+            );
         } else {
-            // For original fabric cuts: W2/01 -> patterns like W2-01, W2-1, etc.
-            fabricNumber1 = `${warpNumber}-${String(parsedCutNumber).padStart(2, '0')}`; // W2-01
-            fabricNumber2 = `${warpNumber}-${parsedCutNumber}`; // W2-1
-            fabricNumber3 = `${warpNumber}/${String(parsedCutNumber).padStart(2, '0')}`; // W2/01
-            fabricNumber4 = `${warpNumber}/${parsedCutNumber}`; // W2/1
-            fabricNumber5 = null; // Not used for original cuts
-            fabricNumber6 = null; // Not used for original cuts
+            // For original fabric cuts: W2/01
+            searchPatterns.push(
+                `${warpNumber}-${String(parsedCutNumber).padStart(2, '0')}`, // W2-01 (PRIMARY MATCH)
+                `${warpNumber}-${parsedCutNumber}`, // W2-1
+                `${warpNumber}/${String(parsedCutNumber).padStart(2, '0')}`, // W2/01
+                `${warpNumber}/${parsedCutNumber}` // W2/1
+            );
         }
         
         console.log('Trying fabric number patterns:');
-        console.log('  Pattern 1:', fabricNumber1);
-        console.log('  Pattern 2:', fabricNumber2);
-        console.log('  Pattern 3:', fabricNumber3);
-        console.log('  Pattern 4:', fabricNumber4);
-        if (splitNumber) {
-            console.log('  Pattern 5:', fabricNumber5);
-            console.log('  Pattern 6:', fabricNumber6);
-        }
+        searchPatterns.forEach((pattern, index) => {
+            console.log(`  Pattern ${index + 1}:`, pattern);
+        });
         
         // Get all fabric cuts and filter in JavaScript to avoid index requirement
         console.log('Fetching all fabric cuts...');
@@ -1384,15 +1383,13 @@ router.get('/by-qr/:qrCode', async (req, res) => {
         
         fabricCutsSnapshot.forEach(doc => {
             const data = doc.data();
-            if (data.fabricNumber === fabricNumber1 || 
-                data.fabricNumber === fabricNumber2 || 
-                data.fabricNumber === fabricNumber3 || 
-                data.fabricNumber === fabricNumber4 ||
-                (splitNumber && (data.fabricNumber === fabricNumber5 || data.fabricNumber === fabricNumber6))) {
+            // Check if this fabric cut matches any of our search patterns
+            if (searchPatterns.includes(data.fabricNumber)) {
                 fabricCutDoc = doc;
                 fabricCutData = data;
                 matchedPattern = data.fabricNumber;
                 console.log('MATCH FOUND! Fabric number:', data.fabricNumber);
+                console.log('Matched pattern index:', searchPatterns.indexOf(data.fabricNumber) + 1);
             }
         });
         
@@ -1981,8 +1978,8 @@ router.post('/split-fabric', async (req, res) => {
                 loomName: originalFabric.loomName || (loomData ? loomData.loomName : null),
                 companyName: originalFabric.companyName || (loomData ? loomData.companyName : null),
                 createdAt: new Date(),
-                // Copy inspection arrival status from parent if it exists
-                inspectionArrival: originalFabric.inspectionArrival || null
+                // Do not inherit inspection arrival - new cuts need to be scanned separately
+                inspectionArrival: null
             };
             
             const docRef = db.collection('fabricCuts').doc();

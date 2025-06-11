@@ -100,17 +100,36 @@ function InspectionReports() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(buildApiUrl('inspections/4-point'));
+      // Force the API URL to use the correct endpoint
+      const apiUrl = process.env.NODE_ENV === 'production' 
+        ? '/api/inspections/4-point' 
+        : 'http://localhost:3001/api/inspections/4-point';
+      
+      console.log('Fetching inspections from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch inspection data');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
       const data = await response.json();
+      console.log('Received data:', data);
+      
       // Sort by inspection date (newest first)
       const sortedData = data.sort((a, b) => {
         const dateA = new Date(a.inspectionDate);
         const dateB = new Date(b.inspectionDate);
         return dateB.getTime() - dateA.getTime();
       });
+      
       setInspections(sortedData);
       setFilteredInspections(sortedData);
     } catch (err) {
@@ -194,7 +213,9 @@ function InspectionReports() {
         (inspection.fabricCut?.warp?.warpOrderNumber || '').toLowerCase().includes(filters.warpNumber.toLowerCase());
       
       const orderMatch = !filters.orderNumber || 
-        (inspection.orderNumber || '').toLowerCase().includes(filters.orderNumber.toLowerCase());
+        (inspection.fabricCut?.warp?.order?.orderNumber || 
+         inspection.fabricCut?.warp?.order?.orderName || 
+         inspection.orderNumber || '').toLowerCase().includes(filters.orderNumber.toLowerCase());
       
       const designMatch = !filters.designName || 
         (inspection.fabricCut?.warp?.order?.designName || '').toLowerCase().includes(filters.designName.toLowerCase()) ||
@@ -209,9 +230,10 @@ function InspectionReports() {
     setFilteredInspections(filtered);
   }, [inspections, filters]);
 
+  // Only fetch data once on component mount, not on every render
   useEffect(() => {
     fetchFourPointInspections();
-  }, []);
+  }, []); // Empty dependency array to prevent frequent refreshing
 
   const handleFilterChange = (field, value) => {
     setFilters(prev => ({
@@ -457,7 +479,9 @@ function InspectionReports() {
                         </TableCell>
                         <TableCell>
                           <Chip 
-                            label={inspection.orderNumber || 'N/A'} 
+                            label={inspection.fabricCut?.warp?.order?.orderNumber || 
+                                   inspection.fabricCut?.warp?.order?.orderName || 
+                                   inspection.orderNumber || 'N/A'} 
                             size="small" 
                             variant="outlined"
                             color="secondary"
@@ -517,12 +541,22 @@ function InspectionReports() {
                         </TableCell>
                         <TableCell>
                           <Box>
-                            <Typography variant="caption" display="block" fontWeight="medium">
-                              {inspection.inspector1 || 'N/A'}
-                            </Typography>
-                            <Typography variant="caption" display="block" fontWeight="medium">
-                              {inspection.inspector2 || 'N/A'}
-                            </Typography>
+                            {inspection.inspectors && inspection.inspectors.length > 0 ? (
+                              inspection.inspectors.map((inspector, index) => (
+                                <Typography key={index} variant="caption" display="block" fontWeight="medium">
+                                  {inspector}
+                                </Typography>
+                              ))
+                            ) : (
+                              <>
+                                <Typography variant="caption" display="block" fontWeight="medium">
+                                  {inspection.inspector1 || 'N/A'}
+                                </Typography>
+                                <Typography variant="caption" display="block" fontWeight="medium">
+                                  {inspection.inspector2 || 'N/A'}
+                                </Typography>
+                              </>
+                            )}
                           </Box>
                         </TableCell>
                         <TableCell>

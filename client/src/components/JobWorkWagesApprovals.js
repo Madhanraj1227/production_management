@@ -137,6 +137,14 @@ function JobWorkWagesApprovals() {
     setSelectedSubmission(submission);
     setActionType(action);
     setRemarks('');
+    // Initialize editValues with current submission values for approval
+    setEditValues({
+      totalInspectedQuantity: submission.totalInspectedQuantity || 0,
+      totalMistakeQuantity: submission.totalMistakeQuantity || 0,
+      totalActualQuantity: submission.totalActualQuantity || 0,
+      ratePerMeter: submission.ratePerMeter || 0,
+      totalWages: submission.totalWages || 0
+    });
     setApprovalDialogOpen(true);
   };
 
@@ -219,7 +227,7 @@ function JobWorkWagesApprovals() {
     const updatedSubmission = {
       ...selectedSubmission,
       ...editValues,
-      edited: true // Mark as edited
+// Values updated by user
     };
     setSelectedSubmission(updatedSubmission);
     
@@ -242,18 +250,27 @@ function JobWorkWagesApprovals() {
         remarks: remarks
       };
 
-      // Include edited values if they exist and differ from original
-      if (editValues.totalInspectedQuantity !== selectedSubmission.totalInspectedQuantity ||
-          editValues.totalMistakeQuantity !== selectedSubmission.totalMistakeQuantity ||
-          editValues.totalActualQuantity !== selectedSubmission.totalActualQuantity ||
-          editValues.ratePerMeter !== selectedSubmission.ratePerMeter) {
-        requestData.updatedValues = editValues;
-      }
+      // Always include the current values
+      requestData.updatedValues = {
+        totalInspectedQuantity: editValues.totalInspectedQuantity,
+        totalMistakeQuantity: editValues.totalMistakeQuantity,
+        totalActualQuantity: editValues.totalActualQuantity,
+        ratePerMeter: editValues.ratePerMeter,
+        totalWages: editValues.totalWages
+      };
 
       await axios.patch(buildApiUrl(`job-work-wages/${selectedSubmission.id}/approve`), requestData);
 
       setApprovalDialogOpen(false);
       setRemarks('');
+      
+      // Emit event to notify other components about the approval
+      if (actionType === 'approve') {
+        window.dispatchEvent(new CustomEvent('jobWorkWagesApproved', {
+          detail: { warpId: selectedSubmission.warpId }
+        }));
+      }
+      
       fetchSubmissions(); // Refresh the list
       
       alert(`Job work wages ${actionType}d successfully!`);
@@ -459,23 +476,18 @@ function JobWorkWagesApprovals() {
                     </TableCell>
                     <TableCell sx={{ fontWeight: '600', color: '#2e7d32' }}>
                       {submission.totalInspectedQuantity?.toFixed(2)}
-                      {submission.edited && <Chip size="small" label="Edited" color="warning" sx={{ ml: 1, fontSize: '0.7rem' }} />}
                     </TableCell>
                     <TableCell sx={{ fontWeight: '600', color: '#d32f2f' }}>
                       {submission.totalMistakeQuantity?.toFixed(2)}
-                      {submission.edited && <Chip size="small" label="Edited" color="warning" sx={{ ml: 1, fontSize: '0.7rem' }} />}
                     </TableCell>
                     <TableCell sx={{ fontWeight: '600', color: '#1976d2' }}>
                       {submission.totalActualQuantity?.toFixed(2)}
-                      {submission.edited && <Chip size="small" label="Edited" color="warning" sx={{ ml: 1, fontSize: '0.7rem' }} />}
                     </TableCell>
                     <TableCell sx={{ fontWeight: '600', color: '#9C27B0' }}>
                       {formatCurrency(submission.ratePerMeter)}
-                      {submission.edited && <Chip size="small" label="Edited" color="warning" sx={{ ml: 1, fontSize: '0.7rem' }} />}
                     </TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: '#2e7d32', fontSize: '1.1rem' }}>
                       {formatCurrency(submission.totalWages)}
-                      {submission.edited && <Chip size="small" label="Edited" color="warning" sx={{ ml: 1, fontSize: '0.7rem' }} />}
                     </TableCell>
                     <TableCell>
                       {formatDate(submission.submittedAt)}
@@ -494,7 +506,7 @@ function JobWorkWagesApprovals() {
                       {submission.status === 'approved' && (
                         <Chip
                           icon={<CheckCircleIcon />}
-                          label={submission.valuesUpdatedDuringApproval ? 'Approved (Edited)' : 'Approved'}
+                          label="Approved"
                           color="success"
                           variant="contained"
                           size="small"
@@ -757,33 +769,11 @@ function JobWorkWagesApprovals() {
           <Typography variant="body1" gutterBottom>
             Are you sure you want to {actionType} the job work wages for <strong>{selectedSubmission?.warpNumber}</strong>?
           </Typography>
-          {selectedSubmission?.edited && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <Typography variant="body2">
-                <strong>Note:</strong> This submission has been edited. Updated values will be used for approval.
-              </Typography>
-            </Alert>
-          )}
+
           <Typography variant="body2" color="textSecondary" gutterBottom>
             Total Amount: <strong>{formatCurrency(selectedSubmission?.totalWages)}</strong>
           </Typography>
-          {selectedSubmission?.edited && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                Edited Values:
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Typography variant="body2">Total Inspected: {selectedSubmission?.totalInspectedQuantity?.toFixed(2)}m</Typography>
-                  <Typography variant="body2">Total Mistakes: {selectedSubmission?.totalMistakeQuantity?.toFixed(2)}m</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">Total Actual: {selectedSubmission?.totalActualQuantity?.toFixed(2)}m</Typography>
-                  <Typography variant="body2">Rate per Meter: {formatCurrency(selectedSubmission?.ratePerMeter)}</Typography>
-                </Grid>
-              </Grid>
-            </Box>
-          )}
+
           <TextField
             fullWidth
             multiline

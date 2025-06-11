@@ -246,10 +246,10 @@ const LoomIn = () => {
         setCuttingInProgress(true);
         
         try {
-            // Validate QR code format
+            // Validate QR code format (supports both original and split fabric cuts)
             const parts = qrCode.split('/');
-            if (parts.length !== 2) {
-                throw new Error('Invalid fabric cut ID format. Expected: WARPNUMBER/CUTNUMBER');
+            if (parts.length !== 2 && parts.length !== 3) {
+                throw new Error('Invalid fabric cut ID format. Expected: WARPNUMBER/CUTNUMBER or WARPNUMBER/CUTNUMBER/SPLITNUMBER');
             }
 
             // Fetch fabric cut details
@@ -586,15 +586,20 @@ const LoomIn = () => {
         setLoading(true);
 
         try {
-            // Validate QR code format (should be WARPNUMBER/CUTNUMBER)
+            // Validate QR code format (supports both original and split fabric cuts)
             const parts = qrCode.split('/');
-            if (parts.length !== 2) {
-                throw new Error('Invalid fabric cut ID format. Expected: WARPNUMBER/CUTNUMBER');
+            if (parts.length !== 2 && parts.length !== 3) {
+                throw new Error('Invalid fabric cut ID format. Expected: WARPNUMBER/CUTNUMBER or WARPNUMBER/CUTNUMBER/SPLITNUMBER');
             }
 
-            const [warpNumber, cutNumber] = parts;
+            const [warpNumber, cutNumber, splitNumber] = parts;
             if (!warpNumber || !cutNumber || isNaN(parseInt(cutNumber))) {
                 throw new Error('Invalid fabric cut ID. Check warp number and cut number.');
+            }
+            
+            // Additional validation for split fabric cuts
+            if (splitNumber && isNaN(parseInt(splitNumber))) {
+                throw new Error('Invalid split number in fabric cut ID.');
             }
 
             // Check if already scanned

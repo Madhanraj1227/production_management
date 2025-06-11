@@ -61,7 +61,8 @@ function FabricCutList() {
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deletingCut, setDeletingCut] = useState(null);
 
-  // Removed invoice status tracking as it's no longer needed
+  // Warp invoice status tracking for delete permission control
+  const [warpInvoiceStatus, setWarpInvoiceStatus] = useState({});
 
   // Helper function to format Firebase timestamps
   const formatDate = (timestamp) => {
@@ -88,12 +89,32 @@ function FabricCutList() {
     }
   };
 
-  // Function to check if editing is disabled for a fabric cut
-  // Note: Simplified since we removed invoice status tracking
+  // Function to check if editing/deleting is disabled for a fabric cut
   const isEditingDisabled = (fabricCut) => {
-    // For now, allow editing of all fabric cuts
-    // This can be re-enabled later if needed
-    return false;
+    if (!fabricCut.warpId) return false;
+    
+    const status = warpInvoiceStatus[fabricCut.warpId];
+    // Disable if there's an approved job work wages invoice for this warp
+    return status?.hasApprovedInvoices || false;
+  };
+
+  // Function to check warp invoice status
+  const checkWarpInvoiceStatus = async (warpIds) => {
+    try {
+      const statusPromises = warpIds.map(async (warpId) => {
+        const response = await axios.get(buildApiUrl(`job-work-wages/check-warp-status/${warpId}`));
+        return { warpId, status: response.data };
+      });
+
+      const results = await Promise.all(statusPromises);
+      const statusMap = {};
+      results.forEach(({ warpId, status }) => {
+        statusMap[warpId] = status;
+      });
+      setWarpInvoiceStatus(statusMap);
+    } catch (error) {
+      console.error('Error checking warp invoice status:', error);
+    }
   };
 
   // Fetch fabric cuts data using optimized endpoint
@@ -130,6 +151,8 @@ function FabricCutList() {
       
       // The optimized endpoint returns a direct array of fabric cuts
       const fabricCutsData = response.data;
+      
+
       
       // Debug: Check for duplicates
       const fabricNumbers = fabricCutsData.map(cut => cut.fabricNumber);
@@ -190,7 +213,11 @@ function FabricCutList() {
       });
       setUniqueWarps(sortedWarps);
 
-      // Invoice status checking removed for performance
+      // Check invoice status for all warps to control delete permissions
+      const uniqueWarpIds = Array.from(warpsMap.keys());
+      if (uniqueWarpIds.length > 0) {
+        await checkWarpInvoiceStatus(uniqueWarpIds);
+      }
     } catch (error) {
       console.error('Error fetching fabric cuts:', error);
       setError('Failed to load fabric cuts data. Please check the console for details.');
@@ -201,9 +228,26 @@ function FabricCutList() {
 
   useEffect(() => {
     fetchFabricCuts(selectedWarp, selectedDate);
+  }, []); // Only run once on component mount
 
-    // Clean up function (invoice event listener removed)
-  }, []);
+  // Separate effect for invoice approval events only
+  useEffect(() => {
+    // Listen for invoice approval events to refresh the status
+    const handleInvoiceApproval = () => {
+      console.log('🔄 Job work wages approved event received - refreshing invoice status');
+      // Only refresh warp invoice status, not the entire fabric cuts
+      const uniqueWarpIds = Array.from(new Set(fabricCuts.map(cut => cut.warpId).filter(Boolean)));
+      if (uniqueWarpIds.length > 0) {
+        checkWarpInvoiceStatus(uniqueWarpIds);
+      }
+    };
+
+    window.addEventListener('jobWorkWagesApproved', handleInvoiceApproval);
+
+    return () => {
+      window.removeEventListener('jobWorkWagesApproved', handleInvoiceApproval);
+    };
+  }, [fabricCuts]); // Only depend on fabricCuts, not uniqueWarps
 
   // Handle warp filter change with server-side filtering
   const handleWarpFilterChange = (warpOrderNumber) => {

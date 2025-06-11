@@ -13,7 +13,9 @@ const COLLECTIONS_TO_CLEAR = [
     'fabricCuts',
     'freedQuantities',
     'counters',
-    'inspections'
+    'inspections',
+    'invoices',
+    'jobWorkWagesSubmissions'
 ];
 // ---------------------
 

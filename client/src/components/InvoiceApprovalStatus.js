@@ -123,7 +123,7 @@ function InvoiceApprovalStatus() {
       case 'approved':
         color = 'success';
         icon = <CheckCircleIcon />;
-        label = hasEdits ? 'Approved (Edited)' : 'Approved';
+        label = 'Approved';
         break;
       case 'rejected':
         color = 'error';

@@ -74,6 +74,16 @@ function JobWorkWages() {
 
     setSubmitting(true);
     try {
+      console.log('🔍 DEBUG - Fabric cuts data before calculation:', data.fabricCuts);
+      console.log('🔍 DEBUG - Total calculations:', {
+        totalOriginalQty,
+        totalInspectedQty,
+        totalMistakeQty,
+        totalActualQty,
+        rate,
+        totalAmount
+      });
+
       const submissionData = {
         warpNumber: data.warp.warpOrderNumber,
         warpId: data.warp.id,
@@ -92,6 +102,8 @@ function JobWorkWages() {
         submittedAt: new Date().toISOString(),
         status: 'pending'
       };
+
+      console.log('🔍 DEBUG - Submission data being sent:', submissionData);
 
       const response = await axios.post(buildApiUrl('job-work-wages/submit'), submissionData);
       alert(`Job work wages submitted for approval successfully! Invoice Number: ${response.data.invoiceNumber}`);
