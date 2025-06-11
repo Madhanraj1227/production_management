@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "client": "cd client && npm start",
+    "client": "cd client && cross-env PORT=3000 react-scripts start",
     "dev:full": "concurrently \"npm run dev\" \"npm run client\"",
     "heroku-postbuild": "node build-for-render.js",
     "build": "node build-for-render.js",
@@ -15,7 +15,8 @@
     "test:prod": "npm run build && npm run start:prod",
     "debug:env": "node debug-env.js",
     "test:db": "node test-database.js",
-    "add:sample": "node add-sample-data.js"
+    "add:sample": "node add-sample-data.js",
+    "db:clear": "node clear-database.js"
   },
   "dependencies": {
     "body-parser": "^1.20.2",

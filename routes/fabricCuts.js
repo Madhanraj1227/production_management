@@ -361,6 +361,13 @@ router.get('/optimized', async (req, res) => {
             return dateB.getTime() - dateA.getTime();
         });
         
+        // Get all 4-point inspections to check scan status
+        const inspectionsSnapshot = await db.collection('inspections').where('inspectionType', '==', '4-point').get();
+        const inspectedCutIds = new Set();
+        inspectionsSnapshot.forEach(doc => {
+            inspectedCutIds.add(doc.data().fabricCutId);
+        });
+
         // Batch fetch related data to minimize database calls
         const warpIds = [...new Set(allFabricCuts.map(cut => cut.warpId).filter(Boolean))];
         const warpsData = {};
@@ -437,7 +444,8 @@ router.get('/optimized', async (req, res) => {
             
             return {
                 ...fabricCutData,
-                warp: enrichedWarp
+                warp: enrichedWarp,
+                scannedAt4Point: inspectedCutIds.has(fabricCutData.id) || fabricCutData.scannedAt4Point
             };
         });
         

@@ -1,277 +1,426 @@
 const express = require('express');
 const router = express.Router();
-const { admin, db } = require('./database');
 
-// GET all inspections with pagination and filtering
+// GET all inspections
 router.get('/', async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      inspectionType, 
-      dateFrom, 
-      dateTo, 
-      fabricId, 
-      inspectedBy,
-      sortBy = 'inspectionDate',
-      sortOrder = 'desc'
-    } = req.query;
-
-    console.log(`📋 Fetching inspections - Page: ${page}, Limit: ${limit}, Type: ${inspectionType || 'all'}`);
-
-    let query = db.collection('inspections');
-
-    // Apply filters
-    if (inspectionType) {
-      query = query.where('inspectionType', '==', inspectionType);
-    }
+    const db = req.app.locals.db;
     
-    if (fabricId) {
-      query = query.where('fabricId', '==', fabricId);
-    }
+    // Get all inspections
+    const inspectionsSnapshot = await db.collection('inspections').get();
     
-    if (inspectedBy) {
-      query = query.where('inspectedBy', '==', inspectedBy);
-    }
-
-    // Date range filter
-    if (dateFrom) {
-      query = query.where('inspectionDate', '>=', new Date(dateFrom).toISOString());
-    }
+    const inspections = [];
+    const fabricCutIds = new Set();
     
-    if (dateTo) {
-      query = query.where('inspectionDate', '<=', new Date(dateTo).toISOString());
-    }
-
-    // Apply sorting
-    query = query.orderBy(sortBy, sortOrder);
-
-    // Apply pagination
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    if (offset > 0) {
-      const offsetSnapshot = await query.limit(offset).get();
-      if (!offsetSnapshot.empty) {
-        const lastDoc = offsetSnapshot.docs[offsetSnapshot.docs.length - 1];
-        query = query.startAfter(lastDoc);
+    inspectionsSnapshot.forEach(doc => {
+      const data = doc.data();
+      inspections.push({
+        id: doc.id,
+        ...data
+      });
+      if (data.fabricCutId) {
+        fabricCutIds.add(data.fabricCutId);
       }
+    });
+    
+    // Batch fetch fabric cuts with their related data
+    const fabricCutsMap = new Map();
+    const warpIds = new Set();
+    
+    if (fabricCutIds.size > 0) {
+      const fabricCutPromises = Array.from(fabricCutIds).map(async (fabricCutId) => {
+        try {
+          const fabricCutDoc = await db.collection('fabricCuts').doc(fabricCutId).get();
+          if (fabricCutDoc.exists) {
+            const fabricCutData = { id: fabricCutDoc.id, ...fabricCutDoc.data() };
+            fabricCutsMap.set(fabricCutId, fabricCutData);
+            if (fabricCutData.warpId) {
+              warpIds.add(fabricCutData.warpId);
+            }
+          }
+        } catch (err) {
+          console.error(`Error fetching fabric cut ${fabricCutId}:`, err);
+        }
+      });
+      await Promise.all(fabricCutPromises);
     }
-
-    query = query.limit(parseInt(limit));
-
-    const snapshot = await query.get();
-    const inspections = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Get total count for pagination
-    const countQuery = db.collection('inspections');
-    const countSnapshot = await countQuery.get();
-    const totalCount = countSnapshot.size;
-
-    console.log(`✅ Found ${inspections.length} inspections out of ${totalCount} total`);
-
-    res.json({
-      inspections,
-      totalCount,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(totalCount / parseInt(limit)),
-      hasMore: (parseInt(page) * parseInt(limit)) < totalCount
+    
+    // Batch fetch warps and their orders/looms
+    const warpsMap = new Map();
+    const orderIds = new Set();
+    const loomIds = new Set();
+    
+    if (warpIds.size > 0) {
+      const warpPromises = Array.from(warpIds).map(async (warpId) => {
+        try {
+          const warpDoc = await db.collection('warps').doc(warpId).get();
+          if (warpDoc.exists) {
+            const warpData = { id: warpDoc.id, ...warpDoc.data() };
+            warpsMap.set(warpId, warpData);
+            if (warpData.orderId) orderIds.add(warpData.orderId);
+            if (warpData.loomId) loomIds.add(warpData.loomId);
+          }
+        } catch (err) {
+          console.error(`Error fetching warp ${warpId}:`, err);
+        }
+      });
+      await Promise.all(warpPromises);
+    }
+    
+    // Batch fetch orders and looms
+    const [ordersMap, loomsMap] = await Promise.all([
+      // Fetch orders
+      (async () => {
+        const ordersMap = new Map();
+        if (orderIds.size > 0) {
+          const orderPromises = Array.from(orderIds).map(async (orderId) => {
+            try {
+              const orderDoc = await db.collection('orders').doc(orderId).get();
+              if (orderDoc.exists) {
+                ordersMap.set(orderId, {
+                  id: orderDoc.id,
+                  ...orderDoc.data()
+                });
+              }
+            } catch (err) {
+              console.error(`Error fetching order ${orderId}:`, err);
+            }
+          });
+          await Promise.all(orderPromises);
+        }
+        return ordersMap;
+      })(),
+      
+      // Fetch looms
+      (async () => {
+        const loomsMap = new Map();
+        if (loomIds.size > 0) {
+          const loomPromises = Array.from(loomIds).map(async (loomId) => {
+            try {
+              const loomDoc = await db.collection('looms').doc(loomId).get();
+              if (loomDoc.exists) {
+                loomsMap.set(loomId, {
+                  id: loomDoc.id,
+                  ...loomDoc.data()
+                });
+              }
+            } catch (err) {
+              console.error(`Error fetching loom ${loomId}:`, err);
+            }
+          });
+          await Promise.all(loomPromises);
+        }
+        return loomsMap;
+      })()
+    ]);
+    
+    // Assemble the final response with all related data
+    const enrichedInspections = inspections.map(inspection => {
+      const fabricCut = fabricCutsMap.get(inspection.fabricCutId);
+      let enrichedFabricCut = fabricCut;
+      
+      if (fabricCut && fabricCut.warpId) {
+        const warp = warpsMap.get(fabricCut.warpId);
+        if (warp) {
+          const order = warp.orderId ? ordersMap.get(warp.orderId) : null;
+          const loom = warp.loomId ? loomsMap.get(warp.loomId) : null;
+          
+          enrichedFabricCut = {
+            ...fabricCut,
+            warp: {
+              ...warp,
+              order: order,
+              loom: loom
+            }
+          };
+        }
+      }
+      
+      return {
+        ...inspection,
+        fabricCut: enrichedFabricCut
+      };
     });
-
+    
+    res.json(enrichedInspections);
   } catch (error) {
-    console.error('❌ Error fetching inspections:', error);
-    res.status(500).json({ 
-      message: 'Error fetching inspections', 
-      error: error.message 
-    });
+    console.error('Error fetching inspections:', error);
+    res.status(500).json({ error: 'Failed to fetch inspections' });
   }
 });
 
-// GET single inspection by ID
+// GET inspections by fabric cut ID
+router.get('/fabric-cut/:fabricCutId', async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const inspectionsSnapshot = await db.collection('inspections')
+      .where('fabricCutId', '==', req.params.fabricCutId)
+      .get();
+    
+    const inspections = [];
+    inspectionsSnapshot.forEach(doc => {
+      inspections.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    res.json(inspections);
+  } catch (error) {
+    console.error('Error fetching inspections by fabric cut:', error);
+    res.status(500).json({ error: 'Failed to fetch inspections' });
+  }
+});
+
+// GET 4-Point inspections with fabric cut details
+router.get('/4-point', async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    
+    // Get all 4-Point inspections
+    const inspectionsSnapshot = await db.collection('inspections')
+      .where('inspectionType', '==', '4-point')
+      .get();
+    
+    const inspections = [];
+    const fabricCutIds = new Set();
+    
+    inspectionsSnapshot.forEach(doc => {
+      const data = doc.data();
+      inspections.push({
+        id: doc.id,
+        ...data
+      });
+      if (data.fabricCutId) {
+        fabricCutIds.add(data.fabricCutId);
+      }
+    });
+    
+    // Batch fetch fabric cuts with their related data
+    const fabricCutsMap = new Map();
+    const warpIds = new Set();
+    
+    if (fabricCutIds.size > 0) {
+      const fabricCutPromises = Array.from(fabricCutIds).map(async (fabricCutId) => {
+        try {
+          const fabricCutDoc = await db.collection('fabricCuts').doc(fabricCutId).get();
+          if (fabricCutDoc.exists) {
+            const fabricCutData = { id: fabricCutDoc.id, ...fabricCutDoc.data() };
+            fabricCutsMap.set(fabricCutId, fabricCutData);
+            if (fabricCutData.warpId) {
+              warpIds.add(fabricCutData.warpId);
+            }
+          }
+        } catch (err) {
+          console.error(`Error fetching fabric cut ${fabricCutId}:`, err);
+        }
+      });
+      await Promise.all(fabricCutPromises);
+    }
+    
+    // Batch fetch warps and their orders/looms
+    const warpsMap = new Map();
+    const orderIds = new Set();
+    const loomIds = new Set();
+    
+    if (warpIds.size > 0) {
+      const warpPromises = Array.from(warpIds).map(async (warpId) => {
+        try {
+          const warpDoc = await db.collection('warps').doc(warpId).get();
+          if (warpDoc.exists) {
+            const warpData = { id: warpDoc.id, ...warpDoc.data() };
+            warpsMap.set(warpId, warpData);
+            if (warpData.orderId) orderIds.add(warpData.orderId);
+            if (warpData.loomId) loomIds.add(warpData.loomId);
+          }
+        } catch (err) {
+          console.error(`Error fetching warp ${warpId}:`, err);
+        }
+      });
+      await Promise.all(warpPromises);
+    }
+    
+    // Batch fetch orders and looms
+    const [ordersMap, loomsMap] = await Promise.all([
+      // Fetch orders
+      (async () => {
+        const ordersMap = new Map();
+        if (orderIds.size > 0) {
+          const orderPromises = Array.from(orderIds).map(async (orderId) => {
+            try {
+              const orderDoc = await db.collection('orders').doc(orderId).get();
+              if (orderDoc.exists) {
+                ordersMap.set(orderId, {
+                  id: orderDoc.id,
+                  ...orderDoc.data()
+                });
+              }
+            } catch (err) {
+              console.error(`Error fetching order ${orderId}:`, err);
+            }
+          });
+          await Promise.all(orderPromises);
+        }
+        return ordersMap;
+      })(),
+      
+      // Fetch looms
+      (async () => {
+        const loomsMap = new Map();
+        if (loomIds.size > 0) {
+          const loomPromises = Array.from(loomIds).map(async (loomId) => {
+            try {
+              const loomDoc = await db.collection('looms').doc(loomId).get();
+              if (loomDoc.exists) {
+                loomsMap.set(loomId, {
+                  id: loomDoc.id,
+                  ...loomDoc.data()
+                });
+              }
+            } catch (err) {
+              console.error(`Error fetching loom ${loomId}:`, err);
+            }
+          });
+          await Promise.all(loomPromises);
+        }
+        return loomsMap;
+      })()
+    ]);
+    
+    // Assemble the final response with all related data
+    const enrichedInspections = inspections.map(inspection => {
+      const fabricCut = fabricCutsMap.get(inspection.fabricCutId);
+      let enrichedFabricCut = fabricCut;
+      
+      if (fabricCut && fabricCut.warpId) {
+        const warp = warpsMap.get(fabricCut.warpId);
+        if (warp) {
+          const order = warp.orderId ? ordersMap.get(warp.orderId) : null;
+          const loom = warp.loomId ? loomsMap.get(warp.loomId) : null;
+          
+          enrichedFabricCut = {
+            ...fabricCut,
+            warp: {
+              ...warp,
+              order: order,
+              loom: loom
+            }
+          };
+        }
+      }
+      
+      return {
+        ...inspection,
+        fabricCut: enrichedFabricCut
+      };
+    });
+    
+    res.json(enrichedInspections);
+  } catch (error) {
+    console.error('Error fetching 4-Point inspections:', error);
+    res.status(500).json({ error: 'Failed to fetch 4-Point inspections' });
+  }
+});
+
+// GET inspection by ID
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    console.log(`📋 Fetching inspection: ${id}`);
-
-    const doc = await db.collection('inspections').doc(id).get();
+    const db = req.app.locals.db;
+    const doc = await db.collection('inspections').doc(req.params.id).get();
     
     if (!doc.exists) {
-      return res.status(404).json({ message: 'Inspection not found' });
+      return res.status(404).json({ error: 'Inspection not found' });
     }
-
-    const inspection = {
+    
+    res.json({
       id: doc.id,
       ...doc.data()
-    };
-
-    console.log(`✅ Found inspection: ${inspection.fabricId} - ${inspection.inspectionType}`);
-    res.json(inspection);
-
-  } catch (error) {
-    console.error('❌ Error fetching inspection:', error);
-    res.status(500).json({ 
-      message: 'Error fetching inspection', 
-      error: error.message 
     });
+  } catch (error) {
+    console.error('Error fetching inspection:', error);
+    res.status(500).json({ error: 'Failed to fetch inspection' });
   }
 });
 
-// POST new inspection
+// POST create new inspection
 router.post('/', async (req, res) => {
   try {
+    const db = req.app.locals.db;
     const inspectionData = {
       ...req.body,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
-
-    console.log(`📋 Creating new ${inspectionData.inspectionType} inspection for fabric: ${inspectionData.fabricId}`);
-
-    // Validate required fields
-    const requiredFields = ['fabricId', 'originalQuantity', 'mistakeDescription', 'inspectionType', 'inspectedBy'];
-    const missingFields = requiredFields.filter(field => !inspectionData[field]);
     
-    if (missingFields.length > 0) {
-      return res.status(400).json({ 
-        message: `Missing required fields: ${missingFields.join(', ')}` 
-      });
-    }
-
-    // Validate numeric fields
-    if (inspectionData.originalQuantity <= 0) {
-      return res.status(400).json({ 
-        message: 'Original quantity must be greater than 0' 
-      });
-    }
-
-    if (inspectionData.mistakeQuantity < 0) {
-      return res.status(400).json({ 
-        message: 'Mistake quantity cannot be negative' 
-      });
-    }
-
-    // Create document
     const docRef = await db.collection('inspections').add(inspectionData);
-    const newDoc = await docRef.get();
     
-    const createdInspection = {
-      id: newDoc.id,
-      ...newDoc.data()
-    };
-
-    console.log(`✅ Inspection created successfully: ${createdInspection.id}`);
-    res.status(201).json(createdInspection);
-
-  } catch (error) {
-    console.error('❌ Error creating inspection:', error);
-    res.status(500).json({ 
-      message: 'Error creating inspection', 
-      error: error.message 
+    // Update fabric cut with inspection status
+    if (inspectionData.fabricCutId) {
+      await db.collection('fabricCuts').doc(inspectionData.fabricCutId).update({
+        [`${inspectionData.inspectionType}Completed`]: true,
+        [`${inspectionData.inspectionType}Date`]: inspectionData.inspectionDate,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    
+    const { inspectionType, fabricCutId } = inspectionData;
+    if (inspectionType === '4-point' && fabricCutId) {
+      try {
+        const fabricCutRef = db.collection('fabricCuts').doc(fabricCutId);
+        await fabricCutRef.update({
+          scannedAt4Point: true,
+          lastUpdated: new Date()
+        });
+        console.log(`Updated fabric cut ${fabricCutId} with 4-point scan status.`);
+      } catch (error) {
+        console.error(`Failed to update fabric cut ${fabricCutId}:`, error);
+        // Do not block inspection creation, just log the error
+      }
+    }
+    
+    res.status(201).json({
+      id: docRef.id,
+      ...inspectionData
     });
+  } catch (error) {
+    console.error('Error creating inspection:', error);
+    res.status(500).json({ error: 'Failed to create inspection' });
   }
 });
 
 // PUT update inspection
 router.put('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    const db = req.app.locals.db;
     const updateData = {
       ...req.body,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: new Date().toISOString()
     };
-
-    console.log(`📋 Updating inspection: ${id}`);
-
-    const docRef = db.collection('inspections').doc(id);
-    const doc = await docRef.get();
     
-    if (!doc.exists) {
-      return res.status(404).json({ message: 'Inspection not found' });
-    }
-
-    await docRef.update(updateData);
-    const updatedDoc = await docRef.get();
+    await db.collection('inspections').doc(req.params.id).update(updateData);
     
-    const updatedInspection = {
+    const updatedDoc = await db.collection('inspections').doc(req.params.id).get();
+    
+    res.json({
       id: updatedDoc.id,
       ...updatedDoc.data()
-    };
-
-    console.log(`✅ Inspection updated successfully: ${id}`);
-    res.json(updatedInspection);
-
-  } catch (error) {
-    console.error('❌ Error updating inspection:', error);
-    res.status(500).json({ 
-      message: 'Error updating inspection', 
-      error: error.message 
     });
+  } catch (error) {
+    console.error('Error updating inspection:', error);
+    res.status(500).json({ error: 'Failed to update inspection' });
   }
 });
 
 // DELETE inspection
 router.delete('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    console.log(`📋 Deleting inspection: ${id}`);
-
-    const docRef = db.collection('inspections').doc(id);
-    const doc = await docRef.get();
-    
-    if (!doc.exists) {
-      return res.status(404).json({ message: 'Inspection not found' });
-    }
-
-    await docRef.delete();
-    console.log(`✅ Inspection deleted successfully: ${id}`);
+    const db = req.app.locals.db;
+    await db.collection('inspections').doc(req.params.id).delete();
     
     res.json({ message: 'Inspection deleted successfully' });
-
   } catch (error) {
-    console.error('❌ Error deleting inspection:', error);
-    res.status(500).json({ 
-      message: 'Error deleting inspection', 
-      error: error.message 
-    });
-  }
-});
-
-// GET inspection statistics
-router.get('/stats/summary', async (req, res) => {
-  try {
-    console.log('📊 Fetching inspection statistics...');
-
-    const snapshot = await db.collection('inspections').get();
-    const inspections = snapshot.docs.map(doc => doc.data());
-
-    const stats = {
-      totalInspections: inspections.length,
-      byType: {
-        'four-point': inspections.filter(i => i.inspectionType === 'four-point').length,
-        'unwashed': inspections.filter(i => i.inspectionType === 'unwashed').length,
-        'washed': inspections.filter(i => i.inspectionType === 'washed').length
-      },
-      totalOriginalQuantity: inspections.reduce((sum, i) => sum + (i.originalQuantity || 0), 0),
-      totalMistakeQuantity: inspections.reduce((sum, i) => sum + (i.mistakeQuantity || 0), 0),
-      totalActualQuantity: inspections.reduce((sum, i) => sum + (i.actualQuantity || 0), 0),
-      defectRate: 0
-    };
-
-    // Calculate defect rate percentage
-    if (stats.totalOriginalQuantity > 0) {
-      stats.defectRate = ((stats.totalMistakeQuantity / stats.totalOriginalQuantity) * 100).toFixed(2);
-    }
-
-    console.log(`✅ Stats generated: ${stats.totalInspections} total inspections`);
-    res.json(stats);
-
-  } catch (error) {
-    console.error('❌ Error fetching inspection statistics:', error);
-    res.status(500).json({ 
-      message: 'Error fetching inspection statistics', 
-      error: error.message 
-    });
+    console.error('Error deleting inspection:', error);
+    res.status(500).json({ error: 'Failed to delete inspection' });
   }
 });
 

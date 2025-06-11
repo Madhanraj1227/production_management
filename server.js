@@ -91,6 +91,23 @@ app.use('/api/fabric-cuts', fabricCutRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/inspections', inspectionRoutes);
 
+// API root endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    message: 'Fabric Production Tracker API',
+    version: '1.0.0',
+    endpoints: {
+      orders: '/api/orders',
+      warps: '/api/warps',
+      looms: '/api/looms',
+      fabricCuts: '/api/fabric-cuts',
+      database: '/api/database',
+      inspections: '/api/inspections'
+    },
+    health: '/health'
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 

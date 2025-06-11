@@ -79,10 +79,7 @@ const LogoImage = styled('img')(({ theme }) => ({
 
 // Predefined users for production system
 const DEMO_USERS = [
-  { username: 'admin', password: 'admin123', role: 'Admin', fullAccess: true },
-  { username: 'fabric', password: 'fabric123', role: 'Fabric Manager', fabricAccess: true },
-  { username: 'yarn', password: 'yarn123', role: 'Yarn Manager', yarnOnly: true },
-  { username: 'insp', password: 'insp123', role: 'Fabric Inspector', inspectionAccess: true }
+  { username: 'admin', password: 'admin123', role: 'Admin', fullAccess: true }
 ];
 
 function Login({ onLogin }) {
@@ -123,10 +120,6 @@ function Login({ onLogin }) {
         username: user.username,
         role: user.role,
         fullAccess: user.fullAccess || false,
-        fabricAccess: user.fabricAccess || false,
-        yarnOnly: user.yarnOnly || false,
-        inspectionAccess: user.inspectionAccess || false,
-        loginTime: new Date().toISOString()
       };
       
       localStorage.setItem('userSession', JSON.stringify(userSession));
@@ -248,15 +241,6 @@ function Login({ onLogin }) {
             </Typography>
             <Typography variant="caption" display="block" align="center">
               • admin / admin123 (Admin - Full Access)
-            </Typography>
-            <Typography variant="caption" display="block" align="center">
-              • fabric / fabric123 (Fabric Manager)
-            </Typography>
-            <Typography variant="caption" display="block" align="center">
-              • yarn / yarn123 (Yarn Manager)
-            </Typography>
-            <Typography variant="caption" display="block" align="center">
-              • insp / insp123 (Fabric Inspector)
             </Typography>
           </Box>
         </StyledPaper>

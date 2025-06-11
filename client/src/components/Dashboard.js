@@ -10,13 +10,13 @@ import {
   Box,
   Chip,
 } from '@mui/material';
+import { buildApiUrl } from '../config/api';
 import AddIcon from '@mui/icons-material/Add';
 import ListIcon from '@mui/icons-material/List';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import HistoryIcon from '@mui/icons-material/History';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import { buildApiUrl } from '../config/api';
 
 function Dashboard({ user }) {
   const navigate = useNavigate();

@@ -4,28 +4,22 @@ import { ThemeProvider, createTheme } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
 import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
-import Navbar from './components/Navbar';
+import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
-import YarnDashboard from './components/YarnDashboard';
-import GreigeYarnInput from './components/GreigeYarnInput';
-import GreigeYarnDelivery from './components/GreigeYarnDelivery';
-import DyedYarnInput from './components/DyedYarnInput';
-import DyedYarnDelivery from './components/DyedYarnDelivery';
-import YarnInventory from './components/YarnInventory';
 import OrderForm from './components/OrderForm';
 import WarpForm from './components/WarpForm';
 import WarpEditForm from './components/WarpEditForm';
-import FabricCutForm from './components/FabricCutForm';
-import LoomForm from './components/LoomForm';
-import OrderList from './components/OrderList';
 import WarpList from './components/WarpList';
 import FabricCutList from './components/FabricCutList';
+import FabricCutForm from './components/FabricCutForm';
+import LoomForm from './components/LoomForm';
 import LoomList from './components/LoomList';
 import LoomIn from './components/LoomIn';
-import InspectionDashboard from './components/InspectionDashboard';
+import OrderList from './components/OrderList';
 import FourPointInspection from './components/FourPointInspection';
 import UnwashedInspection from './components/UnwashedInspection';
 import WashedInspection from './components/WashedInspection';
+import InspectionReports from './components/InspectionReports';
 
 const theme = createTheme({
   palette: {
@@ -48,7 +42,12 @@ function App() {
     if (savedSession) {
       try {
         const userSession = JSON.parse(savedSession);
-        setUser(userSession);
+        // Automatically log in if fullAccess is true
+        if (userSession.fullAccess) {
+          setUser(userSession);
+        } else {
+          localStorage.removeItem('userSession');
+        }
       } catch (error) {
         console.error('Error parsing user session:', error);
         localStorage.removeItem('userSession');
@@ -102,70 +101,38 @@ function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <ErrorBoundary>
-          <Login onLogin={handleLogin} />
-        </ErrorBoundary>
-      </ThemeProvider>
-    );
-  }
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <ErrorBoundary>
-        <Router>
-          <Navbar user={user} onLogout={handleLogout} />
-          <Routes>
-            {/* Dashboard Routes - Role-based */}
-            {user?.yarnOnly ? (
-              <>
-                <Route path="/" element={<Dashboard user={user} />} />
-                <Route path="/yarn/greige-input" element={<GreigeYarnInput />} />
-                <Route path="/yarn/greige-delivery" element={<GreigeYarnDelivery />} />
-                <Route path="/yarn/dyed-input" element={<DyedYarnInput />} />
-                <Route path="/yarn/dyed-delivery" element={<DyedYarnDelivery />} />
-                <Route path="/yarn/inventory" element={<YarnInventory />} />
-                {/* Redirect any unknown paths to dashboard for yarn users */}
-                <Route path="*" element={<Dashboard user={user} />} />
-              </>
-            ) : user?.inspectionAccess ? (
-              <>
-                <Route path="/" element={<InspectionDashboard user={user} />} />
-                <Route path="/inspection" element={<InspectionDashboard user={user} />} />
-                <Route path="/inspection/four-point" element={<FourPointInspection />} />
+      <Router>
+        <ErrorBoundary>
+          {user ? (
+            <Layout user={user} onLogout={handleLogout}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/orders" element={<OrderList />} />
+                <Route path="/orders/new" element={<OrderForm />} />
+                <Route path="/warps" element={<WarpList />} />
+                <Route path="/warps/new" element={<WarpForm />} />
+                <Route path="/warps/edit/:id" element={<WarpEditForm />} />
+                <Route path="/fabric-cuts" element={<FabricCutList />} />
+                <Route path="/fabric-cuts/new" element={<FabricCutForm />} />
+                <Route path="/looms" element={<LoomList />} />
+                <Route path="/looms/new" element={<LoomForm />} />
+                <Route path="/loom-in" element={<LoomIn />} />
+                <Route path="/loom-in/:view" element={<LoomIn />} />
+                <Route path="/inspection/4-point" element={<FourPointInspection />} />
                 <Route path="/inspection/unwashed" element={<UnwashedInspection />} />
                 <Route path="/inspection/washed" element={<WashedInspection />} />
-                {/* Redirect any unknown paths to inspection dashboard */}
-                <Route path="*" element={<InspectionDashboard user={user} />} />
-              </>
-            ) : (
-              <>
-                <Route path="/" element={<Dashboard user={user} />} />
-                {/* Fabric Management Routes - Only for Admin and Fabric Manager */}
-                {(user?.fullAccess || user?.fabricAccess) && (
-                  <>
-                    <Route path="/orders/new" element={<OrderForm />} />
-                    <Route path="/orders" element={<OrderList />} />
-                    <Route path="/warps/new" element={<WarpForm />} />
-                    <Route path="/warps/edit/:id" element={<WarpEditForm />} />
-                    <Route path="/warps" element={<WarpList />} />
-                    <Route path="/fabric-cuts/new" element={<FabricCutForm />} />
-                    <Route path="/fabric-cuts" element={<FabricCutList />} />
-                    <Route path="/looms/new" element={<LoomForm />} />
-                    <Route path="/looms" element={<LoomList />} />
-                    <Route path="/loom-in" element={<LoomIn />} />
-                    <Route path="/loom-in/:view" element={<LoomIn />} />
-                  </>
-                )}
-              </>
-            )}
-          </Routes>
-        </Router>
-      </ErrorBoundary>
+                <Route path="/inspection-reports" element={<InspectionReports />} />
+                <Route path="*" element={<Dashboard />} />
+              </Routes>
+            </Layout>
+          ) : (
+            <Login onLogin={handleLogin} />
+          )}
+        </ErrorBoundary>
+      </Router>
     </ThemeProvider>
   );
 }

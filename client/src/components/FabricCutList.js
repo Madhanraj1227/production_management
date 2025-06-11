@@ -620,6 +620,7 @@ function FabricCutList() {
                 <TableCell>Created At</TableCell>
                 <TableCell>QR Code</TableCell>
                 <TableCell>Loom-In</TableCell>
+                <TableCell>4PT</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -679,6 +680,13 @@ function FabricCutList() {
                       <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />
                     ) : (
                       <CancelIcon color="error" sx={{ fontSize: 20 }} />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {cut.scannedAt4Point ? (
+                      <CheckCircleIcon style={{ color: 'green' }} />
+                    ) : (
+                      <CancelIcon style={{ color: 'red' }} />
                     )}
                   </TableCell>
                   <TableCell>
