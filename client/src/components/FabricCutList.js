@@ -61,8 +61,7 @@ function FabricCutList() {
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deletingCut, setDeletingCut] = useState(null);
 
-  // Invoice status tracking
-  const [warpInvoiceStatus, setWarpInvoiceStatus] = useState(new Map());
+  // Removed invoice status tracking as it's no longer needed
 
   // Helper function to format Firebase timestamps
   const formatDate = (timestamp) => {
@@ -89,38 +88,12 @@ function FabricCutList() {
     }
   };
 
-  // Check invoice status for warps
-  const checkWarpInvoiceStatus = async (warpIds) => {
-    const statusMap = new Map();
-    
-    try {
-      // Check invoice status for each unique warp
-      const statusPromises = warpIds.map(async (warpId) => {
-        try {
-          const response = await axios.get(buildApiUrl(`job-work-wages/check-warp-status/${warpId}`));
-          return { warpId, status: response.data };
-        } catch (error) {
-          console.error(`Error checking invoice status for warp ${warpId}:`, error);
-          return { warpId, status: { hasSubmittedInvoices: false } };
-        }
-      });
-
-      const statusResults = await Promise.all(statusPromises);
-      statusResults.forEach(({ warpId, status }) => {
-        statusMap.set(warpId, status);
-      });
-    } catch (error) {
-      console.error('Error checking warp invoice statuses:', error);
-    }
-
-    setWarpInvoiceStatus(statusMap);
-  };
-
   // Function to check if editing is disabled for a fabric cut
+  // Note: Simplified since we removed invoice status tracking
   const isEditingDisabled = (fabricCut) => {
-    if (!fabricCut.warp?.id) return false;
-    const warpStatus = warpInvoiceStatus.get(fabricCut.warp.id);
-    return warpStatus?.hasSubmittedInvoices || false;
+    // For now, allow editing of all fabric cuts
+    // This can be re-enabled later if needed
+    return false;
   };
 
   // Fetch fabric cuts data using optimized endpoint
@@ -134,10 +107,13 @@ function FabricCutList() {
       const params = new URLSearchParams();
       
       if (warpFilter) {
-        // Find the warp ID for the selected warp number
+        // Find the warp ID for the selected warp number (exact match)
         const selectedWarpData = uniqueWarps.find(w => w.warpNumber === warpFilter);
         if (selectedWarpData) {
+          console.log('🔍 Filtering by warp:', warpFilter, 'ID:', selectedWarpData.id);
           params.append('warpId', selectedWarpData.id);
+        } else {
+          console.warn('⚠️ Warp not found for filter:', warpFilter);
         }
       }
       
@@ -154,32 +130,67 @@ function FabricCutList() {
       
       // The optimized endpoint returns a direct array of fabric cuts
       const fabricCutsData = response.data;
-      setFabricCuts(fabricCutsData);
+      
+      // Debug: Check for duplicates
+      const fabricNumbers = fabricCutsData.map(cut => cut.fabricNumber);
+      const uniqueFabricNumbers = new Set(fabricNumbers);
+      if (fabricNumbers.length !== uniqueFabricNumbers.size) {
+        console.warn('⚠️ Duplicate fabric cuts detected:', fabricNumbers.length, 'total vs', uniqueFabricNumbers.size, 'unique');
+        
+        // Remove duplicates - keep the most recent one (by createdAt)
+        const deduplicatedData = [];
+        const seenFabricNumbers = new Map();
+        
+        // Sort by createdAt descending first
+        const sortedData = [...fabricCutsData].sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+          return dateB.getTime() - dateA.getTime();
+        });
+        
+        sortedData.forEach(cut => {
+          if (!seenFabricNumbers.has(cut.fabricNumber)) {
+            seenFabricNumbers.set(cut.fabricNumber, true);
+            deduplicatedData.push(cut);
+          } else {
+            console.log('🗑️ Removing duplicate:', cut.fabricNumber, 'ID:', cut.id);
+          }
+        });
+        
+        setFabricCuts(deduplicatedData);
+        console.log('✅ Deduplicated:', deduplicatedData.length, 'fabric cuts');
+      } else {
+        setFabricCuts(fabricCutsData);
+      }
       
       // Extract unique warps from the fabric cuts data
       const warpsMap = new Map();
       fabricCutsData.forEach(cut => {
         if (cut.warp && cut.warp.id) {
-          warpsMap.set(cut.warp.id, {
-            id: cut.warp.id,
-            warpNumber: cut.warp.warpNumber || cut.warp.warpOrderNumber || 'N/A',
-            orderNumber: cut.warp.order?.orderNumber || cut.warp.order?.orderName || 'N/A',
-            designName: cut.warp.order?.designName || 'N/A',
-            designNumber: cut.warp.order?.designNumber || 'N/A',
-            loomName: cut.warp.loom?.loomName || 'N/A',
-            companyName: cut.warp.loom?.companyName || 'N/A',
-            quantity: cut.warp.quantity || 0
-          });
+          const warpNumber = cut.warp.warpNumber || cut.warp.warpOrderNumber || 'N/A';
+          // Only add if warpNumber is valid (not 'N/A') and unique
+          if (warpNumber !== 'N/A') {
+            warpsMap.set(cut.warp.id, {
+              id: cut.warp.id,
+              warpNumber: warpNumber,
+              orderNumber: cut.warp.order?.orderNumber || cut.warp.order?.orderName || 'N/A',
+              designName: cut.warp.order?.designName || 'N/A',
+              designNumber: cut.warp.order?.designNumber || 'N/A',
+              loomName: cut.warp.loom?.loomName || 'N/A',
+              companyName: cut.warp.loom?.companyName || 'N/A',
+              quantity: cut.warp.quantity || 0
+            });
+          }
         }
       });
       
-      setUniqueWarps(Array.from(warpsMap.values()));
+      // Sort the unique warps by warpNumber for better UX
+      const sortedWarps = Array.from(warpsMap.values()).sort((a, b) => {
+        return a.warpNumber.localeCompare(b.warpNumber, undefined, { numeric: true });
+      });
+      setUniqueWarps(sortedWarps);
 
-      // Check invoice status for all warps
-      const warpIds = Array.from(warpsMap.keys());
-      if (warpIds.length > 0) {
-        await checkWarpInvoiceStatus(warpIds);
-      }
+      // Invoice status checking removed for performance
     } catch (error) {
       console.error('Error fetching fabric cuts:', error);
       setError('Failed to load fabric cuts data. Please check the console for details.');
@@ -191,17 +202,7 @@ function FabricCutList() {
   useEffect(() => {
     fetchFabricCuts();
 
-    // Listen for invoice deletion events to refresh status
-    const handleInvoiceDeleted = () => {
-      // Refresh fabric cuts to update invoice status
-      fetchFabricCuts(selectedWarp, selectedDate);
-    };
-
-    window.addEventListener('invoiceDeleted', handleInvoiceDeleted);
-
-    return () => {
-      window.removeEventListener('invoiceDeleted', handleInvoiceDeleted);
-    };
+    // Clean up function (invoice event listener removed)
   }, [selectedWarp, selectedDate]);
 
   // Handle warp filter change with server-side filtering
@@ -370,10 +371,6 @@ function FabricCutList() {
 
   // Handle opening edit dialog
   const handleEditClick = (cut) => {
-    if (isEditingDisabled(cut)) {
-      alert('Editing is disabled because a job work wages invoice has been submitted for this warp. Please delete the invoice first to enable editing.');
-      return;
-    }
     setEditingCut(cut);
     setNewQuantity(cut.quantity.toString());
     setEditDialog(true);
@@ -549,19 +546,7 @@ function FabricCutList() {
               <Typography variant="h6" color="primary">
                 Production Summary for {selectedWarp}
               </Typography>
-              {(() => {
-                const warpStatus = warpInvoiceStatus.get(selectedWarpData.id);
-                if (warpStatus?.hasSubmittedInvoices) {
-                  return (
-                    <Alert severity="warning" sx={{ py: 0.5 }}>
-                      <Typography variant="body2">
-                        ⚠️ Editing disabled: Invoice submitted
-                      </Typography>
-                    </Alert>
-                  );
-                }
-                return null;
-              })()}
+
             </Box>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={2.4}>
@@ -700,7 +685,6 @@ function FabricCutList() {
                 <TableCell>QR Code</TableCell>
                 <TableCell>Loom-In</TableCell>
                 <TableCell>4PT</TableCell>
-                <TableCell>Invoice Status</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -770,65 +754,22 @@ function FabricCutList() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {cut.warp?.id && (() => {
-                      const warpStatus = warpInvoiceStatus.get(cut.warp.id);
-                      if (!warpStatus) return <Chip label="Unknown" size="small" color="default" />;
-                      
-                      if (warpStatus.hasPendingInvoices) {
-                        return <Chip label="Pending" size="small" color="warning" />;
-                      } else if (warpStatus.hasApprovedInvoices) {
-                        return <Chip label="Approved" size="small" color="success" />;
-                      } else {
-                        return <Chip label="No Invoice" size="small" color="default" />;
-                      }
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    {isEditingDisabled(cut) ? (
-                      <Tooltip title="Editing disabled: Job work wages invoice has been submitted for this warp">
-                        <span>
-                          <IconButton 
-                            color="primary" 
-                            size="small"
-                            disabled
-                            sx={{ mr: 1 }}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    ) : (
-                      <IconButton 
-                        color="primary" 
-                        size="small"
-                        onClick={() => handleEditClick(cut)}
-                        sx={{ mr: 1 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    )}
+                    <IconButton 
+                      color="primary" 
+                      size="small"
+                      onClick={() => handleEditClick(cut)}
+                      sx={{ mr: 1 }}
+                    >
+                      <EditIcon />
+                    </IconButton>
                     
-                    {isEditingDisabled(cut) ? (
-                      <Tooltip title="Deletion disabled: Job work wages invoice has been submitted for this warp">
-                        <span>
-                          <IconButton 
-                            color="error" 
-                            size="small"
-                            disabled
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    ) : (
-                      <IconButton 
-                        color="error" 
-                        size="small"
-                        onClick={() => handleDeleteClick(cut)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
+                    <IconButton 
+                      color="error" 
+                      size="small"
+                      onClick={() => handleDeleteClick(cut)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
