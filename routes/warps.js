@@ -651,7 +651,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/warps/:id - Get a specific warp
+// GET /api/warps/:id - Get a single warp by ID
 router.get('/:id', async (req, res) => {
   try {
     const db = req.app.locals.db;
@@ -951,6 +951,116 @@ router.delete('/:id', async (req, res) => {
     console.error('Error deleting warp:', error);
     res.status(500).json({ error: 'Failed to delete warp' });
   }
+});
+
+// Get all details for a completed warp for wage calculation
+router.get('/wages-details/:warpNumber', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        const { warpNumber } = req.params;
+
+        // 1. Find the warp by warpNumber
+        const warpsSnapshot = await db.collection('warps').where('warpOrderNumber', '==', warpNumber).limit(1).get();
+        if (warpsSnapshot.empty) {
+            return res.status(404).json({ message: `Warp with number ${warpNumber} not found.` });
+        }
+
+        const warpDoc = warpsSnapshot.docs[0];
+        const warp = { id: warpDoc.id, ...warpDoc.data() };
+
+        // 2. Check if the warp is completed or stopped
+        if (warp.status !== 'complete' && warp.status !== 'stopped') {
+            return res.status(400).json({ message: `Warp ${warpNumber} is not ready for wage calculation. Status must be 'complete' or 'stopped'. Current status: ${warp.status}.` });
+        }
+
+        // 3. Fetch loom, order, and all fabric cuts for the warp in parallel
+        const [loom, order, fabricCutsSnapshot] = await Promise.all([
+            warp.loomId ? db.collection('looms').doc(warp.loomId).get() : Promise.resolve(null),
+            warp.orderId ? db.collection('orders').doc(warp.orderId).get() : Promise.resolve(null),
+            db.collection('fabricCuts').where('warpId', '==', warp.id).get()
+        ]);
+
+        const fabricCuts = fabricCutsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const fabricCutIds = fabricCuts.map(cut => cut.id);
+
+        // 4. Fetch all 4-point inspections for all fabric cuts of this warp
+        let inspectionsMap = new Map();
+        if (fabricCutIds.length > 0) {
+            const inspectionPromises = [];
+            // Firestore 'in' query has a limit of 30 values per query
+            for (let i = 0; i < fabricCutIds.length; i += 30) {
+                const batchIds = fabricCutIds.slice(i, i + 30);
+                inspectionPromises.push(
+                    db.collection('inspections')
+                        .where('fabricCutId', 'in', batchIds)
+                        .where('inspectionType', '==', '4-point')
+                        .get()
+                );
+            }
+
+            const inspectionSnapshots = await Promise.all(inspectionPromises);
+            inspectionSnapshots.forEach(snapshot => {
+                snapshot.forEach(doc => {
+                    const inspectionData = doc.data();
+                    inspectionsMap.set(inspectionData.fabricCutId, { id: doc.id, ...inspectionData });
+                });
+            });
+        }
+        
+        // --- NEW VALIDATION STEP ---
+        // Check if all fabric cuts have been scanned at 4-point inspection
+        const notScannedAt4Point = fabricCuts.filter(cut => !inspectionsMap.has(cut.id));
+
+        if (notScannedAt4Point.length > 0) {
+            const missingCuts = notScannedAt4Point.map(cut => cut.fabricNumber).join(', ');
+            const message = `The following fabric cuts must be scanned at 4-Point Inspection before calculating wages: ${missingCuts}.`;
+            return res.status(400).json({ message });
+        }
+        // --- END NEW VALIDATION ---
+
+        // 5. Assemble the data
+        const loomData = loom && loom.exists ? { id: loom.id, ...loom.data() } : null;
+        const orderData = order && order.exists ? { id: order.id, ...order.data() } : null;
+
+        const fabricCutsData = fabricCuts.map(cut => {
+            const inspectionData = inspectionsMap.get(cut.id) || {};
+            
+            // Handle both inspector formats: array (new) and individual fields (old)
+            let inspectors = [];
+            if (inspectionData.inspectors && inspectionData.inspectors.length > 0) {
+                // New format: inspectors array
+                inspectors = inspectionData.inspectors;
+            } else if (inspectionData.inspector1 || inspectionData.inspector2) {
+                // Old format: individual inspector fields
+                inspectors = [inspectionData.inspector1, inspectionData.inspector2].filter(Boolean);
+            }
+            
+            return {
+                ...cut,
+                loomInDate: cut.createdAt,
+                inspectedQuantity: inspectionData.inspectedQuantity || 0,
+                mistakeQuantity: inspectionData.mistakeQuantity || 0,
+                actualQuantity: inspectionData.actualQuantity || 0,
+                mistakes: inspectionData.mistakes || [],
+                inspectors: inspectors,
+                inspector1: inspectionData.inspector1 || null,
+                inspector2: inspectionData.inspector2 || null,
+                inspectionDate: inspectionData.inspectionDate || null,
+            };
+        });
+
+        // 6. Send the complete response
+        res.json({
+            warp,
+            loom: loomData,
+            order: orderData,
+            fabricCuts: fabricCutsData,
+        });
+
+    } catch (error) {
+        console.error(`Error fetching wage details for warp ${req.params.warpNumber}:`, error);
+        res.status(500).json({ message: 'Failed to fetch wage details.' });
+    }
 });
 
 module.exports = router; 

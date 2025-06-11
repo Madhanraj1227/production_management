@@ -1299,70 +1299,154 @@ router.get('/by-qr/:qrCode', async (req, res) => {
         const db = req.app.locals.db;
         const { qrCode } = req.params;
         
+        console.log('=== QR CODE LOOKUP DEBUG ===');
+        console.log('Raw QR code:', qrCode);
+        
         // Parse QR code (format: WARPNUMBER/CUTNUMBER)
         const decodedQR = decodeURIComponent(qrCode);
+        console.log('Decoded QR code:', decodedQR);
+        
         const parts = decodedQR.split('/');
+        console.log('QR parts:', parts);
         
-        if (parts.length !== 2) {
-            return res.status(400).json({ message: 'Invalid QR code format' });
+        if (parts.length !== 2 && parts.length !== 3) {
+            console.log('ERROR: Invalid QR code format - expected 2 or 3 parts, got:', parts.length);
+            return res.status(400).json({ message: 'Invalid QR code format. Expected WARPNUMBER/CUTNUMBER or WARPNUMBER/CUTNUMBER/SPLITNUMBER' });
         }
         
-        const [warpNumber, cutNumberStr] = parts;
-        const cutNumber = parseInt(cutNumberStr, 10);
+        let warpNumber, cutNumber, splitNumber;
         
-        if (isNaN(cutNumber)) {
-            return res.status(400).json({ message: 'Invalid cut number in QR code' });
+        if (parts.length === 2) {
+            // Original fabric cut format: W2/01
+            [warpNumber, cutNumber] = parts;
+            splitNumber = null;
+            console.log('Original fabric cut format detected');
+        } else {
+            // Split fabric cut format: W1/4/01
+            [warpNumber, cutNumber, splitNumber] = parts;
+            console.log('Split fabric cut format detected');
         }
         
-        // Find fabric cut by fabricNumber pattern (WARPNUMBER-CUTNUMBER)
-        const fabricNumber = `${warpNumber}-${String(cutNumber).padStart(2, '0')}`;
+        const parsedCutNumber = parseInt(cutNumber, 10);
+        const parsedSplitNumber = splitNumber ? parseInt(splitNumber, 10) : null;
+        
+        console.log('Warp number:', warpNumber);
+        console.log('Cut number string:', cutNumber);
+        console.log('Parsed cut number:', parsedCutNumber);
+        console.log('Split number string:', splitNumber);
+        console.log('Parsed split number:', parsedSplitNumber);
+        
+        if (isNaN(parsedCutNumber) || (splitNumber && isNaN(parsedSplitNumber))) {
+            console.log('ERROR: Invalid cut or split number');
+            return res.status(400).json({ message: 'Invalid cut or split number in QR code' });
+        }
+        
+        // Find fabric cut by fabricNumber pattern - try multiple patterns
+        let fabricNumber1, fabricNumber2, fabricNumber3, fabricNumber4, fabricNumber5, fabricNumber6;
+        
+        if (splitNumber) {
+            // For split fabric cuts: W1/4/01 -> patterns like W1-4-01, W1-4/01, etc.
+            fabricNumber1 = `${warpNumber}-${parsedCutNumber}-${String(parsedSplitNumber).padStart(2, '0')}`; // W1-4-01
+            fabricNumber2 = `${warpNumber}-${parsedCutNumber}-${parsedSplitNumber}`; // W1-4-1
+            fabricNumber3 = `${warpNumber}/${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`; // W1/4/01
+            fabricNumber4 = `${warpNumber}/${parsedCutNumber}/${parsedSplitNumber}`; // W1/4/1
+            // Add the actual format found in database: W1-4/02
+            fabricNumber5 = `${warpNumber}-${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`; // W1-4/02
+            fabricNumber6 = `${warpNumber}-${parsedCutNumber}/${parsedSplitNumber}`; // W1-4/2
+        } else {
+            // For original fabric cuts: W2/01 -> patterns like W2-01, W2-1, etc.
+            fabricNumber1 = `${warpNumber}-${String(parsedCutNumber).padStart(2, '0')}`; // W2-01
+            fabricNumber2 = `${warpNumber}-${parsedCutNumber}`; // W2-1
+            fabricNumber3 = `${warpNumber}/${String(parsedCutNumber).padStart(2, '0')}`; // W2/01
+            fabricNumber4 = `${warpNumber}/${parsedCutNumber}`; // W2/1
+            fabricNumber5 = null; // Not used for original cuts
+            fabricNumber6 = null; // Not used for original cuts
+        }
+        
+        console.log('Trying fabric number patterns:');
+        console.log('  Pattern 1:', fabricNumber1);
+        console.log('  Pattern 2:', fabricNumber2);
+        console.log('  Pattern 3:', fabricNumber3);
+        console.log('  Pattern 4:', fabricNumber4);
+        if (splitNumber) {
+            console.log('  Pattern 5:', fabricNumber5);
+            console.log('  Pattern 6:', fabricNumber6);
+        }
         
         // Get all fabric cuts and filter in JavaScript to avoid index requirement
+        console.log('Fetching all fabric cuts...');
         const fabricCutsSnapshot = await db.collection('fabricCuts').get();
+        console.log('Total fabric cuts found:', fabricCutsSnapshot.size);
         
         let fabricCutDoc = null;
         let fabricCutData = null;
+        let matchedPattern = null;
         
         fabricCutsSnapshot.forEach(doc => {
             const data = doc.data();
-            if (data.fabricNumber === fabricNumber) {
+            if (data.fabricNumber === fabricNumber1 || 
+                data.fabricNumber === fabricNumber2 || 
+                data.fabricNumber === fabricNumber3 || 
+                data.fabricNumber === fabricNumber4 ||
+                (splitNumber && (data.fabricNumber === fabricNumber5 || data.fabricNumber === fabricNumber6))) {
                 fabricCutDoc = doc;
                 fabricCutData = data;
+                matchedPattern = data.fabricNumber;
+                console.log('MATCH FOUND! Fabric number:', data.fabricNumber);
             }
         });
         
         if (!fabricCutDoc) {
-            return res.status(404).json({ message: 'Fabric cut not found' });
+            console.log('ERROR: No fabric cut found for any pattern');
+            // Log some existing fabric numbers for debugging
+            const existingNumbers = [];
+            fabricCutsSnapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.fabricNumber) {
+                    existingNumbers.push(data.fabricNumber);
+                }
+            });
+            console.log('Existing fabric numbers (first 10):', existingNumbers.slice(0, 10));
+            return res.status(404).json({ message: `Fabric cut not found for QR code: ${decodedQR}` });
         }
+        
+        console.log('Found fabric cut with ID:', fabricCutDoc.id);
+        console.log('Matched pattern:', matchedPattern);
         
         // Get the associated warp and order
         let warpData = null;
         if (fabricCutData.warpId) {
+            console.log('Fetching warp data for ID:', fabricCutData.warpId);
             const warpDoc = await db.collection('warps').doc(fabricCutData.warpId).get();
             if (warpDoc.exists) {
                 const warp = warpDoc.data();
+                console.log('Warp found:', warp.warpOrderNumber);
                 
                 // Get the associated order
                 let orderData = null;
                 if (warp.orderId) {
+                    console.log('Fetching order data for ID:', warp.orderId);
                     const orderDoc = await db.collection('orders').doc(warp.orderId).get();
                     if (orderDoc.exists) {
                         orderData = {
                             id: orderDoc.id,
                             ...orderDoc.data()
                         };
+                        console.log('Order found:', orderData.orderNumber);
                     }
                 }
                 
                 // Get the associated loom
                 let loomData = null;
                 if (warp.loomId) {
+                    console.log('Fetching loom data for ID:', warp.loomId);
                     const loomDoc = await db.collection('looms').doc(warp.loomId).get();
                     if (loomDoc.exists) {
                         loomData = {
                             id: loomDoc.id,
                             ...loomDoc.data()
                         };
+                        console.log('Loom found:', loomData.loomName);
                     } else {
                         // Loom was deleted - use stored loom data from fabric cut if available
                         loomData = {
@@ -1370,6 +1454,7 @@ router.get('/by-qr/:qrCode', async (req, res) => {
                             loomName: fabricCutData.loomName || 'N/A',
                             companyName: fabricCutData.companyName || 'N/A'
                         };
+                        console.log('Using stored loom data:', loomData.loomName);
                     }
                 }
                 
@@ -1379,17 +1464,41 @@ router.get('/by-qr/:qrCode', async (req, res) => {
                     order: orderData,
                     loom: loomData
                 };
+            } else {
+                console.log('ERROR: Warp document not found');
             }
         }
         
-        res.json({
+        // Check if this fabric cut has already been inspected for 4-point
+        if (fabricCutData.scannedAt4Point === true || fabricCutData['4-pointCompleted'] === true) {
+            console.log('ERROR: Fabric cut already has 4-point inspection');
+            console.log('scannedAt4Point:', fabricCutData.scannedAt4Point);
+            console.log('4-pointCompleted:', fabricCutData['4-pointCompleted']);
+            console.log('4-pointDate:', fabricCutData['4-pointDate']);
+            console.log('=== END QR CODE LOOKUP DEBUG ===');
+            return res.status(400).json({ 
+                message: 'This fabric cut has already been inspected with 4-Point Inspection',
+                error: 'ALREADY_INSPECTED',
+                fabricNumber: fabricCutData.fabricNumber,
+                inspectionDate: fabricCutData['4-pointDate']
+            });
+        }
+
+        const response = {
             id: fabricCutDoc.id,
             ...fabricCutData,
             warp: warpData
-        });
+        };
+        
+        console.log('SUCCESS: Returning fabric cut data');
+        console.log('=== END QR CODE LOOKUP DEBUG ===');
+        
+        res.json(response);
     } catch (err) {
+        console.error('=== QR CODE LOOKUP ERROR ===');
         console.error('Error finding fabric cut by QR code:', err);
-        res.status(500).json({ message: err.message });
+        console.error('Error stack:', err.stack);
+        res.status(500).json({ message: `Server error: ${err.message}` });
     }
 });
 
@@ -1915,4 +2024,5 @@ router.post('/split-fabric', async (req, res) => {
     }
 });
 
+module.exports = router;
 module.exports = router;

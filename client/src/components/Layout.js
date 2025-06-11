@@ -15,6 +15,9 @@ import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import CalculateIcon from '@mui/icons-material/Calculate';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 
 const drawerWidth = 240;
 
@@ -26,6 +29,7 @@ const menuItems = [
     { text: 'Fabric Cuts', icon: <ContentCutIcon />, path: '/fabric-cuts' },
     { text: 'Loom-In', icon: <AllInboxIcon />, path: '/loom-in' },
     { text: 'Inspection Reports', icon: <AssessmentIcon />, path: '/inspection-reports' },
+    { text: 'Finances', icon: <AccountBalanceIcon />, path: '/finances' },
 ];
 
 const inspectionItems = [
@@ -34,11 +38,29 @@ const inspectionItems = [
     { text: 'Washed Inspection', icon: <WashIcon />, path: '/inspection/washed' },
 ];
 
+const approvalsItems = [
+    { text: 'Job Work Wages', icon: <CalculateIcon />, path: '/approvals/job-work-wages' },
+];
+
+const invoiceApprovalsItems = [
+    { text: 'Job Work Wages', icon: <CalculateIcon />, path: '/invoice-approvals/job-work-wages' },
+];
+
 const Layout = ({ children, user, onLogout }) => {
     const [inspectionOpen, setInspectionOpen] = useState(false);
+    const [approvalsOpen, setApprovalsOpen] = useState(false);
+    const [invoiceApprovalsOpen, setInvoiceApprovalsOpen] = useState(false);
 
     const handleInspectionClick = () => {
         setInspectionOpen(!inspectionOpen);
+    };
+
+    const handleApprovalsClick = () => {
+        setApprovalsOpen(!approvalsOpen);
+    };
+
+    const handleInvoiceApprovalsClick = () => {
+        setInvoiceApprovalsOpen(!invoiceApprovalsOpen);
     };
     return (
         <Box sx={{ display: 'flex' }}>
@@ -109,6 +131,74 @@ const Layout = ({ children, user, onLogout }) => {
                     <Collapse in={inspectionOpen} timeout="auto" unmountOnExit>
                         <List component="div" disablePadding>
                             {inspectionItems.map((item) => (
+                                <ListItem 
+                                    button 
+                                    key={item.text} 
+                                    component={NavLink} 
+                                    to={item.path}
+                                    sx={{
+                                        pl: 4,
+                                        '&.active': {
+                                            backgroundColor: 'rgba(139, 0, 0, 0.08)',
+                                            color: '#8B0000',
+                                            '& .MuiListItemIcon-root': {
+                                                color: '#8B0000',
+                                            },
+                                        },
+                                    }}
+                                >
+                                    <ListItemIcon>{item.icon}</ListItemIcon>
+                                    <ListItemText primary={item.text} />
+                                </ListItem>
+                            ))}
+                        </List>
+                    </Collapse>
+
+                    {/* Approvals Section */}
+                    <ListItem button onClick={handleApprovalsClick}>
+                        <ListItemIcon>
+                            <ApprovalIcon />
+                        </ListItemIcon>
+                        <ListItemText primary="Approvals" />
+                        {approvalsOpen ? <ExpandLess /> : <ExpandMore />}
+                    </ListItem>
+                    <Collapse in={approvalsOpen} timeout="auto" unmountOnExit>
+                        <List component="div" disablePadding>
+                            {approvalsItems.map((item) => (
+                                <ListItem 
+                                    button 
+                                    key={item.text} 
+                                    component={NavLink} 
+                                    to={item.path}
+                                    sx={{
+                                        pl: 4,
+                                        '&.active': {
+                                            backgroundColor: 'rgba(139, 0, 0, 0.08)',
+                                            color: '#8B0000',
+                                            '& .MuiListItemIcon-root': {
+                                                color: '#8B0000',
+                                            },
+                                        },
+                                    }}
+                                >
+                                    <ListItemIcon>{item.icon}</ListItemIcon>
+                                    <ListItemText primary={item.text} />
+                                </ListItem>
+                            ))}
+                        </List>
+                    </Collapse>
+
+                    {/* Order Form Approvals Section */}
+                    <ListItem button onClick={handleInvoiceApprovalsClick}>
+                        <ListItemIcon>
+                            <ReceiptIcon />
+                        </ListItemIcon>
+                        <ListItemText primary="Order Form Approvals" />
+                        {invoiceApprovalsOpen ? <ExpandLess /> : <ExpandMore />}
+                    </ListItem>
+                    <Collapse in={invoiceApprovalsOpen} timeout="auto" unmountOnExit>
+                        <List component="div" disablePadding>
+                            {invoiceApprovalsItems.map((item) => (
                                 <ListItem 
                                     button 
                                     key={item.text} 

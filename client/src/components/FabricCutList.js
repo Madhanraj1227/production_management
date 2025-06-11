@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Tooltip,
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -60,6 +61,9 @@ function FabricCutList() {
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deletingCut, setDeletingCut] = useState(null);
 
+  // Invoice status tracking
+  const [warpInvoiceStatus, setWarpInvoiceStatus] = useState(new Map());
+
   // Helper function to format Firebase timestamps
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
@@ -83,6 +87,40 @@ function FabricCutList() {
     } catch (error) {
       return 'Invalid Date';
     }
+  };
+
+  // Check invoice status for warps
+  const checkWarpInvoiceStatus = async (warpIds) => {
+    const statusMap = new Map();
+    
+    try {
+      // Check invoice status for each unique warp
+      const statusPromises = warpIds.map(async (warpId) => {
+        try {
+          const response = await axios.get(buildApiUrl(`job-work-wages/check-warp-status/${warpId}`));
+          return { warpId, status: response.data };
+        } catch (error) {
+          console.error(`Error checking invoice status for warp ${warpId}:`, error);
+          return { warpId, status: { hasSubmittedInvoices: false } };
+        }
+      });
+
+      const statusResults = await Promise.all(statusPromises);
+      statusResults.forEach(({ warpId, status }) => {
+        statusMap.set(warpId, status);
+      });
+    } catch (error) {
+      console.error('Error checking warp invoice statuses:', error);
+    }
+
+    setWarpInvoiceStatus(statusMap);
+  };
+
+  // Function to check if editing is disabled for a fabric cut
+  const isEditingDisabled = (fabricCut) => {
+    if (!fabricCut.warp?.id) return false;
+    const warpStatus = warpInvoiceStatus.get(fabricCut.warp.id);
+    return warpStatus?.hasSubmittedInvoices || false;
   };
 
   // Fetch fabric cuts data using optimized endpoint
@@ -136,6 +174,12 @@ function FabricCutList() {
       });
       
       setUniqueWarps(Array.from(warpsMap.values()));
+
+      // Check invoice status for all warps
+      const warpIds = Array.from(warpsMap.keys());
+      if (warpIds.length > 0) {
+        await checkWarpInvoiceStatus(warpIds);
+      }
     } catch (error) {
       console.error('Error fetching fabric cuts:', error);
       setError('Failed to load fabric cuts data. Please check the console for details.');
@@ -146,7 +190,19 @@ function FabricCutList() {
 
   useEffect(() => {
     fetchFabricCuts();
-  }, []);
+
+    // Listen for invoice deletion events to refresh status
+    const handleInvoiceDeleted = () => {
+      // Refresh fabric cuts to update invoice status
+      fetchFabricCuts(selectedWarp, selectedDate);
+    };
+
+    window.addEventListener('invoiceDeleted', handleInvoiceDeleted);
+
+    return () => {
+      window.removeEventListener('invoiceDeleted', handleInvoiceDeleted);
+    };
+  }, [selectedWarp, selectedDate]);
 
   // Handle warp filter change with server-side filtering
   const handleWarpFilterChange = (warpOrderNumber) => {
@@ -314,6 +370,10 @@ function FabricCutList() {
 
   // Handle opening edit dialog
   const handleEditClick = (cut) => {
+    if (isEditingDisabled(cut)) {
+      alert('Editing is disabled because a job work wages invoice has been submitted for this warp. Please delete the invoice first to enable editing.');
+      return;
+    }
     setEditingCut(cut);
     setNewQuantity(cut.quantity.toString());
     setEditDialog(true);
@@ -370,6 +430,10 @@ function FabricCutList() {
 
   // Handle opening delete dialog
   const handleDeleteClick = (cut) => {
+    if (isEditingDisabled(cut)) {
+      alert('Deletion is disabled because a job work wages invoice has been submitted for this warp. Please delete the invoice first to enable deletion.');
+      return;
+    }
     setDeletingCut(cut);
     setDeleteDialog(true);
   };
@@ -481,9 +545,24 @@ function FabricCutList() {
       {selectedWarp && selectedWarpData && (
         <Card sx={{ mb: 3, bgcolor: '#f5f5f5' }}>
           <CardContent>
-            <Typography variant="h6" gutterBottom color="primary">
-              Production Summary for {selectedWarp}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" color="primary">
+                Production Summary for {selectedWarp}
+              </Typography>
+              {(() => {
+                const warpStatus = warpInvoiceStatus.get(selectedWarpData.id);
+                if (warpStatus?.hasSubmittedInvoices) {
+                  return (
+                    <Alert severity="warning" sx={{ py: 0.5 }}>
+                      <Typography variant="body2">
+                        ⚠️ Editing disabled: Invoice submitted
+                      </Typography>
+                    </Alert>
+                  );
+                }
+                return null;
+              })()}
+            </Box>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={2.4}>
                 <Box sx={{ textAlign: 'center' }}>
@@ -621,6 +700,7 @@ function FabricCutList() {
                 <TableCell>QR Code</TableCell>
                 <TableCell>Loom-In</TableCell>
                 <TableCell>4PT</TableCell>
+                <TableCell>Invoice Status</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -690,21 +770,65 @@ function FabricCutList() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <IconButton 
-                      color="primary" 
-                      size="small"
-                      onClick={() => handleEditClick(cut)}
-                      sx={{ mr: 1 }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton 
-                      color="error" 
-                      size="small"
-                      onClick={() => handleDeleteClick(cut)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+                    {cut.warp?.id && (() => {
+                      const warpStatus = warpInvoiceStatus.get(cut.warp.id);
+                      if (!warpStatus) return <Chip label="Unknown" size="small" color="default" />;
+                      
+                      if (warpStatus.hasPendingInvoices) {
+                        return <Chip label="Pending" size="small" color="warning" />;
+                      } else if (warpStatus.hasApprovedInvoices) {
+                        return <Chip label="Approved" size="small" color="success" />;
+                      } else {
+                        return <Chip label="No Invoice" size="small" color="default" />;
+                      }
+                    })()}
+                  </TableCell>
+                  <TableCell>
+                    {isEditingDisabled(cut) ? (
+                      <Tooltip title="Editing disabled: Job work wages invoice has been submitted for this warp">
+                        <span>
+                          <IconButton 
+                            color="primary" 
+                            size="small"
+                            disabled
+                            sx={{ mr: 1 }}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <IconButton 
+                        color="primary" 
+                        size="small"
+                        onClick={() => handleEditClick(cut)}
+                        sx={{ mr: 1 }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    )}
+                    
+                    {isEditingDisabled(cut) ? (
+                      <Tooltip title="Deletion disabled: Job work wages invoice has been submitted for this warp">
+                        <span>
+                          <IconButton 
+                            color="error" 
+                            size="small"
+                            disabled
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <IconButton 
+                        color="error" 
+                        size="small"
+                        onClick={() => handleDeleteClick(cut)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

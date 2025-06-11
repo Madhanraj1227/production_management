@@ -82,6 +82,7 @@ const loomRoutes = require('./routes/looms');
 const fabricCutRoutes = require('./routes/fabricCuts');
 const databaseRoutes = require('./routes/database');
 const inspectionRoutes = require('./routes/inspections');
+const jobWorkWagesRoutes = require('./routes/jobWorkWages');
 
 // Use routes
 app.use('/api/orders', orderRoutes);
@@ -90,6 +91,7 @@ app.use('/api/looms', loomRoutes);
 app.use('/api/fabric-cuts', fabricCutRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/inspections', inspectionRoutes);
+app.use('/api/job-work-wages', jobWorkWagesRoutes);
 
 // API root endpoint
 app.get('/api', (req, res) => {

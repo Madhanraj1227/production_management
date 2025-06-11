@@ -20,6 +20,10 @@ import FourPointInspection from './components/FourPointInspection';
 import UnwashedInspection from './components/UnwashedInspection';
 import WashedInspection from './components/WashedInspection';
 import InspectionReports from './components/InspectionReports';
+import JobWorkWages from './components/JobWorkWages';
+import JobWorkWagesApprovals from './components/JobWorkWagesApprovals';
+import InvoiceApprovalStatus from './components/InvoiceApprovalStatus';
+import Finances from './components/Finances';
 
 const theme = createTheme({
   palette: {
@@ -125,6 +129,10 @@ function App() {
                 <Route path="/inspection/unwashed" element={<UnwashedInspection />} />
                 <Route path="/inspection/washed" element={<WashedInspection />} />
                 <Route path="/inspection-reports" element={<InspectionReports />} />
+                <Route path="/job-work-wages" element={<JobWorkWages />} />
+                <Route path="/approvals/job-work-wages" element={<JobWorkWagesApprovals />} />
+                <Route path="/invoice-approvals/job-work-wages" element={<InvoiceApprovalStatus />} />
+                <Route path="/finances" element={<Finances />} />
                 <Route path="*" element={<Dashboard />} />
               </Routes>
             </Layout>

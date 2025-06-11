@@ -39,6 +39,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
 import SearchIcon from '@mui/icons-material/Search';
 import { buildApiUrl } from '../config/api';
+import { useNavigate } from 'react-router-dom';
 
 const mistakeTypes = [
   'MISSED ENDS',
@@ -85,6 +86,7 @@ function InspectionReports() {
     designName: '',
     loomNumber: ''
   });
+  const navigate = useNavigate();
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
@@ -243,9 +245,17 @@ function InspectionReports() {
     <Container maxWidth="xl" sx={{ mt: 2, mb: 4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <AssessmentIcon sx={{ mr: 2, fontSize: 32, color: '#8B0000' }} />
-        <Typography variant="h4" component="h1" sx={{ color: '#8B0000', fontWeight: 'bold' }}>
+        <Typography variant="h4" component="h1" sx={{ color: '#8B0000', fontWeight: 'bold', flexGrow: 1 }}>
           Inspection Reports
         </Typography>
+        {currentTab === 0 && (
+          <Button
+            variant="contained"
+            onClick={() => navigate('/job-work-wages')}
+          >
+            Job Work Wages
+          </Button>
+        )}
       </Box>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

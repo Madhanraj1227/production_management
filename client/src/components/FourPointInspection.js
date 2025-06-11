@@ -86,9 +86,8 @@ function FourPointInspection() {
   
   const scannerRef = useRef(null);
 
-  const actualQuantity = inspectedQuantity && mistakeQuantity 
-    ? (parseFloat(inspectedQuantity) - parseFloat(mistakeQuantity)).toFixed(2)
-    : '';
+  // Recalculate actual quantity safely
+  const actualQuantity = (parseFloat(inspectedQuantity) || 0) - (parseFloat(mistakeQuantity) || 0);
 
   const startQRScan = () => {
     setQrScanning(true);
@@ -145,6 +144,15 @@ function FourPointInspection() {
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Fabric cut not found in database');
+        } else if (response.status === 400) {
+          // Handle already inspected error
+          const errorData = await response.json();
+          if (errorData.error === 'ALREADY_INSPECTED') {
+            const inspectionDate = errorData.inspectionDate ? 
+              new Date(errorData.inspectionDate).toLocaleDateString() : 'Unknown date';
+            throw new Error(`This fabric cut (${errorData.fabricNumber}) has already been inspected with 4-Point Inspection on ${inspectionDate}`);
+          }
+          throw new Error(errorData.message || 'Invalid fabric cut');
         } else {
           throw new Error(`Server error: ${response.status}`);
         }
@@ -200,35 +208,40 @@ function FourPointInspection() {
     setSelectedMistakes(typeof value === 'string' ? value.split(',') : value);
   };
 
-  const handleSubmit = async () => {
-    if (!inspectedQuantity || !mistakeQuantity || !inspector1 || !inspector2) {
-      setError('Please fill all required fields');
-      return;
-    }
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    if (parseFloat(mistakeQuantity) > 0 && selectedMistakes.length === 0) {
-      setError('Please select mistakes if mistake quantity is entered');
+    console.log('=== FRONTEND INSPECTION SUBMISSION DEBUG ===');
+    console.log('fabricData:', fabricData);
+    console.log('inspectedQuantity:', inspectedQuantity);
+    console.log('mistakeQuantity:', mistakeQuantity);
+    console.log('inspector1:', inspector1);
+    console.log('inspector2:', inspector2);
+    console.log('selectedMistakes:', selectedMistakes);
+
+    if (!fabricData) {
+      setError('Please scan a fabric QR code first.');
       return;
     }
 
     setLoading(true);
+    setError('');
+    
     try {
       const inspectionData = {
         fabricCutId: fabricData.id,
-        fabricNumber: fabricData.fabricNumber,
-        warpNumber: fabricData.warp?.warpNumber || fabricData.warpNumber,
-        orderNumber: fabricData.warp?.order?.orderNumber || fabricData.orderNumber,
         inspectionType: '4-point',
-        originalQuantity: fabricData.quantity,
-        inspectedQuantity: parseFloat(inspectedQuantity),
-        mistakeQuantity: parseFloat(mistakeQuantity),
-        actualQuantity: parseFloat(actualQuantity),
+        originalQuantity: parseFloat(fabricData.quantity) || 0,
+        inspectedQuantity: parseFloat(inspectedQuantity) || 0,
+        mistakeQuantity: parseFloat(mistakeQuantity) || 0,
+        actualQuantity: actualQuantity,
         mistakes: selectedMistakes,
-        inspector1,
-        inspector2,
+        inspectors: [inspector1, inspector2].filter(Boolean), // Remove empty inspector fields
         inspectionDate: new Date().toISOString(),
         status: 'completed'
       };
+
+      console.log('Final inspection data being sent:', JSON.stringify(inspectionData, null, 2));
 
       const response = await fetch(buildApiUrl('inspections'), {
         method: 'POST',
@@ -238,9 +251,27 @@ function FourPointInspection() {
         body: JSON.stringify(inspectionData),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+
       if (!response.ok) {
-        throw new Error('Failed to save inspection');
+        let errorMessage = 'Failed to create inspection';
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+          console.log('Parsed error data:', errorData);
+        } catch (parseError) {
+          console.log('Failed to parse error response as JSON:', parseError);
+          errorMessage = responseText || errorMessage;
+        }
+        throw new Error(`Server Error ${response.status}: ${errorMessage}`);
       }
+
+      const result = JSON.parse(responseText);
+      console.log('Success response:', result);
 
       setSuccess('4-Point inspection completed successfully!');
       
@@ -378,7 +409,7 @@ function FourPointInspection() {
                               <Card variant="outlined">
                   <CardContent>
                     <Typography variant="subtitle2" color="textSecondary">Warp Number</Typography>
-                    <Typography variant="body1" fontWeight="bold">{fabricData.warp?.warpNumber || fabricData.warpNumber || 'N/A'}</Typography>
+                    <Typography variant="body1" fontWeight="bold">{fabricData.warp?.warpOrderNumber || fabricData.warpNumber || 'N/A'}</Typography>
                   </CardContent>
                 </Card>
             </Grid>
@@ -481,42 +512,39 @@ function FourPointInspection() {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  fullWidth
-                  label="Inspected Quantity (meters)"
+                  label="Inspected Quantity"
                   type="number"
+                  fullWidth
                   value={inspectedQuantity}
                   onChange={(e) => setInspectedQuantity(e.target.value)}
-                  inputProps={{ step: 0.1, min: 0 }}
+                  inputProps={{ min: '0', step: '0.01' }}
                   required
                 />
               </Grid>
               
               <Grid item xs={12} sm={6}>
                 <TextField
-                  fullWidth
-                  label="Mistake Quantity (meters)"
+                  label="Mistake Quantity"
                   type="number"
+                  fullWidth
                   value={mistakeQuantity}
                   onChange={(e) => setMistakeQuantity(e.target.value)}
-                  inputProps={{ step: 0.1, min: 0 }}
+                  inputProps={{ min: '0', step: '0.01' }}
                   required
                 />
               </Grid>
             </Grid>
             
-            {actualQuantity && (
-              <Card variant="outlined" sx={{ mt: 2, backgroundColor: '#f5f5f5' }}>
-                <CardContent>
-                  <Typography variant="subtitle2" color="textSecondary">Actual Quantity</Typography>
-                  <Typography variant="h6" fontWeight="bold" color="primary">
-                    {actualQuantity} meters
-                  </Typography>
-                  <Typography variant="caption" color="textSecondary">
-                    (Inspected Quantity - Mistake Quantity)
-                  </Typography>
-                </CardContent>
-              </Card>
-            )}
+            <TextField
+              label="Actual Quantity"
+              type="number"
+              fullWidth
+              value={actualQuantity}
+              InputProps={{
+                readOnly: true,
+              }}
+              sx={{ mb: 2 }}
+            />
           </Box>
 
           {/* Mistakes Section */}

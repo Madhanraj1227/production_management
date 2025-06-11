@@ -345,46 +345,75 @@ router.get('/:id', async (req, res) => {
 // POST create new inspection
 router.post('/', async (req, res) => {
   try {
+    console.log('=== INSPECTION CREATION DEBUG ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
     const db = req.app.locals.db;
+    const { fabricCutId, ...otherData } = req.body;
+
+    console.log('Extracted fabricCutId:', fabricCutId);
+    console.log('Other data:', JSON.stringify(otherData, null, 2));
+
+    if (!fabricCutId) {
+      console.log('ERROR: No fabricCutId provided');
+      return res.status(400).json({ error: 'Fabric Cut ID is required' });
+    }
+
+    // --- Data Enrichment Step ---
+    // Fetch fabric cut to get warpId, fabricNumber, etc.
+    console.log('Fetching fabric cut doc...');
+    const fabricCutDoc = await db.collection('fabricCuts').doc(fabricCutId).get();
+    if (!fabricCutDoc.exists) {
+      console.log('ERROR: Fabric cut not found:', fabricCutId);
+      return res.status(404).json({ error: 'Fabric cut not found' });
+    }
+    const fabricCutData = fabricCutDoc.data();
+    console.log('Fabric cut data:', JSON.stringify(fabricCutData, null, 2));
+
     const inspectionData = {
-      ...req.body,
+      ...otherData,
+      fabricCutId: fabricCutId,
+      fabricNumber: fabricCutData.fabricNumber, // From fetched data
+      warpId: fabricCutData.warpId, // From fetched data
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     
+    console.log('Final inspection data:', JSON.stringify(inspectionData, null, 2));
+    
+    console.log('Adding inspection to database...');
     const docRef = await db.collection('inspections').add(inspectionData);
+    console.log('Inspection created with ID:', docRef.id);
     
     // Update fabric cut with inspection status
-    if (inspectionData.fabricCutId) {
-      await db.collection('fabricCuts').doc(inspectionData.fabricCutId).update({
-        [`${inspectionData.inspectionType}Completed`]: true,
-        [`${inspectionData.inspectionType}Date`]: inspectionData.inspectionDate,
-        updatedAt: new Date().toISOString()
-      });
-    }
-    
-    const { inspectionType, fabricCutId } = inspectionData;
-    if (inspectionType === '4-point' && fabricCutId) {
-      try {
-        const fabricCutRef = db.collection('fabricCuts').doc(fabricCutId);
-        await fabricCutRef.update({
-          scannedAt4Point: true,
-          lastUpdated: new Date()
+    console.log('Updating fabric cut with inspection status...');
+    if (inspectionData.inspectionType === '4-point') {
+        await fabricCutDoc.ref.update({
+            scannedAt4Point: true,
+            [`${inspectionData.inspectionType}Completed`]: true,
+            [`${inspectionData.inspectionType}Date`]: inspectionData.inspectionDate,
+            updatedAt: new Date().toISOString()
         });
-        console.log(`Updated fabric cut ${fabricCutId} with 4-point scan status.`);
-      } catch (error) {
-        console.error(`Failed to update fabric cut ${fabricCutId}:`, error);
-        // Do not block inspection creation, just log the error
-      }
+        console.log('Updated fabric cut with 4-point status');
+    } else {
+         await fabricCutDoc.ref.update({
+            [`${inspectionData.inspectionType}Completed`]: true,
+            [`${inspectionData.inspectionType}Date`]: inspectionData.inspectionDate,
+            updatedAt: new Date().toISOString()
+        });
+        console.log('Updated fabric cut with inspection status');
     }
     
+    console.log('SUCCESS: Inspection created and fabric cut updated');
     res.status(201).json({
       id: docRef.id,
       ...inspectionData
     });
   } catch (error) {
+    console.error('=== INSPECTION CREATION ERROR ===');
     console.error('Error creating inspection:', error);
-    res.status(500).json({ error: 'Failed to create inspection' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to create inspection', details: error.message });
   }
 });
 
