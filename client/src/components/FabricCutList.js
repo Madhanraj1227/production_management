@@ -740,24 +740,11 @@ function FabricCutList() {
                     </Button>
                   </TableCell>
                   <TableCell>
-                    {(() => {
-                      // Debug: Check what fields are available for loom-in status
-                      const hasInspectionArrival = cut.inspectionArrival;
-                      const hasArrivalTime = cut.arrivalTime;
-                      const hasInspectionData = cut.inspectionArrival || cut.arrivalTime;
-                      
-                      console.log(`🔍 Fabric ${cut.fabricNumber}:`, {
-                        inspectionArrival: hasInspectionArrival,
-                        arrivalTime: hasArrivalTime,
-                        hasInspectionData: hasInspectionData
-                      });
-                      
-                      if (hasInspectionData) {
-                        return <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />;
-                      } else {
-                        return <CancelIcon color="error" sx={{ fontSize: 20 }} />;
-                      }
-                    })()}
+                    {cut.inspectionArrival ? (
+                      <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />
+                    ) : (
+                      <CancelIcon color="error" sx={{ fontSize: 20 }} />
+                    )}
                   </TableCell>
                   <TableCell>
                     {cut.scannedAt4Point ? (
