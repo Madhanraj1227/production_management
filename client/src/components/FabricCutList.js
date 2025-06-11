@@ -200,10 +200,10 @@ function FabricCutList() {
   };
 
   useEffect(() => {
-    fetchFabricCuts();
+    fetchFabricCuts(selectedWarp, selectedDate);
 
     // Clean up function (invoice event listener removed)
-  }, [selectedWarp, selectedDate]);
+  }, []);
 
   // Handle warp filter change with server-side filtering
   const handleWarpFilterChange = (warpOrderNumber) => {
@@ -220,7 +220,7 @@ function FabricCutList() {
   const handleClearFilter = () => {
     setSelectedWarp('');
     setSelectedDate('');
-    fetchFabricCuts();
+    fetchFabricCuts('', '');
   };
 
   // Calculate statistics for current fabric cuts
@@ -740,11 +740,24 @@ function FabricCutList() {
                     </Button>
                   </TableCell>
                   <TableCell>
-                    {cut.inspectionArrival ? (
-                      <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />
-                    ) : (
-                      <CancelIcon color="error" sx={{ fontSize: 20 }} />
-                    )}
+                    {(() => {
+                      // Debug: Check what fields are available for loom-in status
+                      const hasInspectionArrival = cut.inspectionArrival;
+                      const hasArrivalTime = cut.arrivalTime;
+                      const hasInspectionData = cut.inspectionArrival || cut.arrivalTime;
+                      
+                      console.log(`🔍 Fabric ${cut.fabricNumber}:`, {
+                        inspectionArrival: hasInspectionArrival,
+                        arrivalTime: hasArrivalTime,
+                        hasInspectionData: hasInspectionData
+                      });
+                      
+                      if (hasInspectionData) {
+                        return <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />;
+                      } else {
+                        return <CancelIcon color="error" sx={{ fontSize: 20 }} />;
+                      }
+                    })()}
                   </TableCell>
                   <TableCell>
                     {cut.scannedAt4Point ? (
