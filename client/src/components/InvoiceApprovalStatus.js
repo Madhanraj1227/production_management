@@ -257,10 +257,11 @@ function InvoiceApprovalStatus() {
           .invoice-container { 
             max-width: 100%; 
             margin: 0 auto; 
-            padding: 5px;
-            height: 100vh;
+            padding: 8px;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
+            justify-content: flex-start;
           }
           .header { 
             display: flex; 
@@ -333,21 +334,21 @@ function InvoiceApprovalStatus() {
             font-size: 10px;
           }
           .table-container { 
-            margin: 4px 0;
-            flex-grow: 1;
-            overflow: hidden;
+            margin: 4px 0 2px 0;
+            flex-shrink: 0;
           }
           .table { 
             width: 100%; 
             border-collapse: collapse; 
             border: 1px solid #800020;
-            font-size: 9px;
+            font-size: 8px;
+            margin-bottom: 8px;
           }
           .table th, .table td { 
             border: 1px solid #800020; 
-            padding: 3px; 
+            padding: 2px; 
             text-align: left; 
-            font-size: 9px;
+            font-size: 8px;
           }
           .table th { 
             background-color: #800020; 
@@ -355,36 +356,36 @@ function InvoiceApprovalStatus() {
             font-weight: bold;
           }
           .summary-section {
-            margin-top: 4px;
+            margin-top: 2px;
             flex-shrink: 0;
           }
           .summary-title { 
-            font-size: 14px; 
+            font-size: 12px; 
             font-weight: bold; 
             color: #800020; 
-            margin-bottom: 4px; 
+            margin-bottom: 3px; 
             text-align: center;
           }
           .summary-cards {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 6px;
-            margin-bottom: 4px;
+            gap: 4px;
+            margin-bottom: 3px;
           }
           .summary-card {
             background-color: #f8f9fa;
             border: 1px solid #800020;
-            border-radius: 4px;
-            padding: 4px;
+            border-radius: 3px;
+            padding: 3px;
             text-align: center;
           }
           .summary-card h4 { 
-            font-size: 9px; 
-            margin: 0 0 2px 0; 
+            font-size: 8px; 
+            margin: 0 0 1px 0; 
             color: #800020;
           }
           .summary-card .value {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: bold;
             color: #000000;
             margin: 0;
@@ -392,22 +393,22 @@ function InvoiceApprovalStatus() {
           .wage-cards {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            margin-top: 4px;
+            gap: 4px;
+            margin-top: 2px;
           }
           .wage-card {
             background-color: #800020;
             color: #ffffff;
-            border-radius: 4px;
-            padding: 6px;
+            border-radius: 3px;
+            padding: 4px;
             text-align: center;
           }
           .wage-card h4 { 
-            font-size: 10px; 
-            margin: 0 0 2px 0;
+            font-size: 9px; 
+            margin: 0 0 1px 0;
           }
           .wage-card .amount { 
-            font-size: 14px; 
+            font-size: 12px; 
             font-weight: bold; 
             margin: 0;
           }
@@ -443,8 +444,7 @@ function InvoiceApprovalStatus() {
               <div class="info-title">Production Details</div>
               <p><strong>Warp Quantity:</strong> ${submission.warpQuantity}m</p>
               <p><strong>Submission Date:</strong> ${new Date(submission.submittedAt).toLocaleDateString()}</p>
-              <p><strong>Status:</strong> ${submission.status}</p>
-              ${submission.valuesUpdatedDuringApproval ? '<p><strong>Note:</strong> Values edited during approval</p>' : ''}
+              <p><strong>Status:</strong> ${submission.status === 'approved' ? 'Approved' : submission.status}</p>
             </div>
           </div>
 

@@ -18,6 +18,10 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import SendIcon from '@mui/icons-material/Send';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import BusinessIcon from '@mui/icons-material/Business';
 
 const drawerWidth = 240;
 
@@ -46,10 +50,17 @@ const invoiceApprovalsItems = [
     { text: 'Job Work Wages', icon: <CalculateIcon />, path: '/invoice-approvals/job-work-wages' },
 ];
 
+const processingItems = [
+    { text: 'Send for Processing', icon: <SendIcon />, path: '/processing/send' },
+    { text: 'Receive from Processing', icon: <GetAppIcon />, path: '/processing/receive' },
+    { text: 'Create new Processing Center', icon: <BusinessIcon />, path: '/processing/create-center' },
+];
+
 const Layout = ({ children, user, onLogout }) => {
     const [inspectionOpen, setInspectionOpen] = useState(false);
     const [approvalsOpen, setApprovalsOpen] = useState(false);
     const [invoiceApprovalsOpen, setInvoiceApprovalsOpen] = useState(false);
+    const [processingOpen, setProcessingOpen] = useState(false);
 
     const handleInspectionClick = () => {
         setInspectionOpen(!inspectionOpen);
@@ -61,6 +72,10 @@ const Layout = ({ children, user, onLogout }) => {
 
     const handleInvoiceApprovalsClick = () => {
         setInvoiceApprovalsOpen(!invoiceApprovalsOpen);
+    };
+
+    const handleProcessingClick = () => {
+        setProcessingOpen(!processingOpen);
     };
     return (
         <Box sx={{ display: 'flex' }}>
@@ -199,6 +214,40 @@ const Layout = ({ children, user, onLogout }) => {
                     <Collapse in={invoiceApprovalsOpen} timeout="auto" unmountOnExit>
                         <List component="div" disablePadding>
                             {invoiceApprovalsItems.map((item) => (
+                                <ListItem 
+                                    button 
+                                    key={item.text} 
+                                    component={NavLink} 
+                                    to={item.path}
+                                    sx={{
+                                        pl: 4,
+                                        '&.active': {
+                                            backgroundColor: 'rgba(139, 0, 0, 0.08)',
+                                            color: '#8B0000',
+                                            '& .MuiListItemIcon-root': {
+                                                color: '#8B0000',
+                                            },
+                                        },
+                                    }}
+                                >
+                                    <ListItemIcon>{item.icon}</ListItemIcon>
+                                    <ListItemText primary={item.text} />
+                                </ListItem>
+                            ))}
+                        </List>
+                    </Collapse>
+
+                    {/* Processing Section */}
+                    <ListItem button onClick={handleProcessingClick}>
+                        <ListItemIcon>
+                            <PrecisionManufacturingIcon />
+                        </ListItemIcon>
+                        <ListItemText primary="Processing" />
+                        {processingOpen ? <ExpandLess /> : <ExpandMore />}
+                    </ListItem>
+                    <Collapse in={processingOpen} timeout="auto" unmountOnExit>
+                        <List component="div" disablePadding>
+                            {processingItems.map((item) => (
                                 <ListItem 
                                     button 
                                     key={item.text} 

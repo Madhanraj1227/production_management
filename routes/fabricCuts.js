@@ -2021,5 +2021,173 @@ router.post('/split-fabric', async (req, res) => {
     }
 });
 
-module.exports = router;
+// Get fabric cut for processing orders (only returns inspected fabric cuts)
+router.get('/for-processing/:qrCode', async (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        const { qrCode } = req.params;
+        
+        console.log('=== PROCESSING ORDER FABRIC CUT LOOKUP ===');
+        console.log('Raw QR code:', qrCode);
+        
+        // Parse QR code (format: WARPNUMBER/CUTNUMBER)
+        const decodedQR = decodeURIComponent(qrCode);
+        console.log('Decoded QR code:', decodedQR);
+        
+        const parts = decodedQR.split('/');
+        console.log('QR parts:', parts);
+        
+        if (parts.length !== 2 && parts.length !== 3) {
+            console.log('ERROR: Invalid QR code format');
+            return res.status(400).json({ message: 'Invalid QR code format. Expected WARPNUMBER/CUTNUMBER' });
+        }
+        
+        let warpNumber, cutNumber, splitNumber;
+        
+        if (parts.length === 2) {
+            [warpNumber, cutNumber] = parts;
+            splitNumber = null;
+        } else {
+            [warpNumber, cutNumber, splitNumber] = parts;
+        }
+        
+        const parsedCutNumber = parseInt(cutNumber, 10);
+        const parsedSplitNumber = splitNumber ? parseInt(splitNumber, 10) : null;
+        
+        if (isNaN(parsedCutNumber) || (splitNumber && isNaN(parsedSplitNumber))) {
+            return res.status(400).json({ message: 'Invalid cut or split number in QR code' });
+        }
+        
+        // Find fabric cut by fabricNumber pattern
+        const searchPatterns = [];
+        
+        if (splitNumber) {
+            searchPatterns.push(
+                `${warpNumber}-${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`,
+                `${warpNumber}-${parsedCutNumber}/${parsedSplitNumber}`,
+                `${warpNumber}/${parsedCutNumber}/${String(parsedSplitNumber).padStart(2, '0')}`,
+                `${warpNumber}/${parsedCutNumber}/${parsedSplitNumber}`
+            );
+        } else {
+            searchPatterns.push(
+                `${warpNumber}-${String(parsedCutNumber).padStart(2, '0')}`,
+                `${warpNumber}-${parsedCutNumber}`,
+                `${warpNumber}/${String(parsedCutNumber).padStart(2, '0')}`,
+                `${warpNumber}/${parsedCutNumber}`
+            );
+        }
+        
+        console.log('Searching fabric number patterns:', searchPatterns);
+        
+        // Get all fabric cuts and filter
+        const fabricCutsSnapshot = await db.collection('fabricCuts').get();
+        
+        let fabricCutDoc = null;
+        let fabricCutData = null;
+        
+        fabricCutsSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (searchPatterns.includes(data.fabricNumber)) {
+                fabricCutDoc = doc;
+                fabricCutData = data;
+                console.log('MATCH FOUND! Fabric number:', data.fabricNumber);
+            }
+        });
+        
+        if (!fabricCutDoc) {
+            console.log('Fabric cut not found for any pattern');
+            return res.status(404).json({ 
+                message: `Fabric cut not found for QR code: ${decodedQR}`,
+                exists: false
+            });
+        }
+        
+        // Check if this fabric cut has been 4-point inspected
+        const hasInspection = fabricCutData.scannedAt4Point === true || fabricCutData['4-pointCompleted'] === true;
+        
+        if (!hasInspection) {
+            console.log('Fabric cut found but not inspected');
+            return res.status(400).json({ 
+                message: 'This fabric cut has not been scanned in 4-point inspection. Please complete inspection first.',
+                exists: true,
+                hasInspection: false,
+                fabricNumber: fabricCutData.fabricNumber
+            });
+        }
+        
+        // Get inspection data to calculate actual inspected quantity
+        let inspectionData = null;
+        let actualInspectedQuantity = fabricCutData.quantity || 0; // Default to original quantity
+        
+        try {
+            const inspectionsSnapshot = await db.collection('inspections')
+                .where('fabricCutId', '==', fabricCutDoc.id)
+                .where('inspectionType', '==', '4-point')
+                .get();
+            
+            if (!inspectionsSnapshot.empty) {
+                inspectionData = inspectionsSnapshot.docs[0].data();
+                
+                // Use the inspected quantity from inspection data (not actual quantity after mistakes)
+                if (inspectionData.inspectedQuantity !== undefined) {
+                    actualInspectedQuantity = inspectionData.inspectedQuantity;
+                } else if (inspectionData.actualQuantity !== undefined) {
+                    actualInspectedQuantity = inspectionData.actualQuantity;
+                } else {
+                    // Fallback to original quantity if no inspection quantity is available
+                    actualInspectedQuantity = fabricCutData.quantity || 0;
+                }
+            }
+        } catch (inspErr) {
+            console.error('Error fetching inspection data:', inspErr);
+            // Continue with original quantity as fallback
+        }
+        
+        // Get warp and order information
+        let warpData = null;
+        let orderData = null;
+        if (fabricCutData.warpId) {
+            const warpDoc = await db.collection('warps').doc(fabricCutData.warpId).get();
+            if (warpDoc.exists) {
+                warpData = warpDoc.data();
+                
+                // Get order information
+                if (warpData.orderId) {
+                    const orderDoc = await db.collection('orders').doc(warpData.orderId).get();
+                    if (orderDoc.exists) {
+                        orderData = orderDoc.data();
+                    }
+                }
+            }
+        }
+        
+        // Return fabric cut data for processing orders
+        const response = {
+            exists: true,
+            hasInspection: true,
+            fabricNumber: fabricCutData.fabricNumber,
+            warpNumber: warpData ? warpData.warpNumber || warpData.warpOrderNumber : warpNumber,
+            inspectedQuantity: actualInspectedQuantity,
+            originalQuantity: fabricCutData.quantity || 0,
+            mistakeQuantity: inspectionData?.mistakeQuantity || fabricCutData.mistakeQuantity || 0,
+            cutNumber: fabricCutData.cutNumber,
+            warpId: fabricCutData.warpId,
+            orderId: warpData ? warpData.orderId : null,
+            orderNumber: orderData ? orderData.orderNumber : 'N/A',
+            designNumber: orderData ? orderData.designNumber : 'N/A',
+            designName: orderData ? orderData.designName : 'N/A',
+            id: fabricCutDoc.id
+        };
+        
+        console.log('Returning fabric cut data for processing:', response);
+        console.log('=== END PROCESSING ORDER FABRIC CUT LOOKUP ===');
+        
+        res.json(response);
+        
+    } catch (err) {
+        console.error('Error fetching fabric cut for processing:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;

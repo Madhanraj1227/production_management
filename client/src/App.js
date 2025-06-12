@@ -24,6 +24,9 @@ import JobWorkWages from './components/JobWorkWages';
 import JobWorkWagesApprovals from './components/JobWorkWagesApprovals';
 import InvoiceApprovalStatus from './components/InvoiceApprovalStatus';
 import Finances from './components/Finances';
+import CreateProcessingCenter from './components/CreateProcessingCenter';
+import SendForProcessing from './components/SendForProcessing';
+import ProcessingOrderForm from './components/ProcessingOrderForm';
 
 const theme = createTheme({
   palette: {
@@ -133,6 +136,9 @@ function App() {
                 <Route path="/approvals/job-work-wages" element={<JobWorkWagesApprovals />} />
                 <Route path="/invoice-approvals/job-work-wages" element={<InvoiceApprovalStatus />} />
                 <Route path="/finances" element={<Finances />} />
+                <Route path="/processing/create-center" element={<CreateProcessingCenter />} />
+                <Route path="/processing/send" element={<SendForProcessing />} />
+                <Route path="/processing/create-order" element={<ProcessingOrderForm />} />
                 <Route path="*" element={<Dashboard />} />
               </Routes>
             </Layout>
