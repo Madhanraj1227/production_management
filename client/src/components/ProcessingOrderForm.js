@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -38,12 +38,8 @@ import {
 } from '@mui/material';
 import {
   Assignment as AssignmentIcon,
-  QrCode as QrCodeIcon,
-  Business as BusinessIcon,
-  Build as BuildIcon,
   QrCodeScanner as QrCodeScannerIcon,
   Delete as DeleteIcon,
-  LocalShipping as LocalShippingIcon,
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
   Print as PrintIcon
@@ -93,7 +89,8 @@ function ProcessingOrderForm({ onClose }) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const generateQRCode = async () => {
+  const generateQRCode = useCallback(async () => {
+    if (!orderFormNumber) return;
     try {
       const dataUrl = await QRCode.toDataURL(orderFormNumber, {
         width: 200,
@@ -107,7 +104,7 @@ function ProcessingOrderForm({ onClose }) {
     } catch (error) {
       console.error('Error generating QR code:', error);
     }
-  };
+  }, [orderFormNumber]);
 
   useEffect(() => {
     generateOrderFormNumber();
@@ -115,10 +112,8 @@ function ProcessingOrderForm({ onClose }) {
   }, []);
 
   useEffect(() => {
-    if (orderFormNumber) {
-      generateQRCode();
-    }
-  }, [orderFormNumber]);
+    generateQRCode();
+  }, [generateQRCode]);
 
   useEffect(() => {
     const total = scannedFabricCuts.reduce((sum, cut) => sum + (cut.inspectedQuantity || 0), 0);
@@ -127,11 +122,9 @@ function ProcessingOrderForm({ onClose }) {
 
   const generateOrderFormNumber = async () => {
     try {
-      // TODO: Get next sequential number from backend
-      // For now, simulate getting the next number (starting from 1)
-      
-      // Get existing orders from localStorage to determine next number
-      const existingOrders = JSON.parse(localStorage.getItem('processingOrders') || '[]');
+      // Get next sequential number from backend
+      const response = await axios.get(buildApiUrl('processing-orders'));
+      const existingOrders = response.data;
       const nextNumber = existingOrders.length + 1;
       const formattedNumber = String(nextNumber).padStart(5, '0');
       setOrderFormNumber(`AT/POF/${formattedNumber}`);
@@ -175,30 +168,20 @@ function ProcessingOrderForm({ onClose }) {
     try {
       const trimmedInput = scanInput.trim();
 
-      // First, check if already scanned in this order (before API call)
-      if (scannedFabricCuts.some(cut => cut.fabricNumber.toLowerCase() === trimmedInput.toLowerCase())) {
-        setScanError(`Fabric cut ${trimmedInput} has already been added to this order.`);
-        return;
-      }
-
-      // Check if fabric cut is already used in other processing orders
-      const existingOrders = JSON.parse(localStorage.getItem('processingOrders') || '[]');
-      const isAlreadyUsed = existingOrders.some(order => 
-        order.fabricCuts && order.fabricCuts.some(cut => cut.fabricNumber.toLowerCase() === trimmedInput.toLowerCase())
-      );
-      
-      if (isAlreadyUsed) {
-        setScanError(`Fabric cut ${trimmedInput} is already in another processing order.`);
-        return;
-      }
-
       // Use the for-processing endpoint that validates 4-point inspection
       const response = await axios.get(buildApiUrl(`fabric-cuts/for-processing/${encodeURIComponent(trimmedInput)}`));
       const fabricCutData = response.data;
 
-      // Final check with the canonical fabric number from the API
+      // Now that we have the canonical fabric number, check if it's already in the list
       if (scannedFabricCuts.some(cut => cut.fabricNumber.toLowerCase() === fabricCutData.fabricNumber.toLowerCase())) {
         setScanError(`Fabric cut ${fabricCutData.fabricNumber} has already been added to this order.`);
+        return;
+      }
+      
+      // Check if fabric cut is already used in other processing orders using its canonical number
+      const checkResponse = await axios.get(buildApiUrl(`processing-orders/check-fabric-cut/${encodeURIComponent(fabricCutData.fabricNumber)}`));
+      if (checkResponse.data.isUsed) {
+        setScanError(`Fabric cut ${fabricCutData.fabricNumber} is already in processing order ${checkResponse.data.orderFormNumber}.`);
         return;
       }
 
@@ -292,11 +275,8 @@ function ProcessingOrderForm({ onClose }) {
     setErrorMessage('');
 
     try {
-      // TODO: Submit processing order to backend
       const orderData = {
-        id: Date.now(), // Temporary ID
         orderFormNumber,
-        qrCode: qrCodeDataUrl, // Include QR code data
         processingCenter: getSelectedProcessingCenterName(),
         processingCenterId: selectedProcessingCenter,
         processes: selectedProcesses,
@@ -308,26 +288,21 @@ function ProcessingOrderForm({ onClose }) {
         deliveredBy,
         status: 'sent',
         createdAt: new Date().toISOString(),
-        // Include order details
-        orderNumber: orderDetails?.orderNumber || null,
-        designNumber: orderDetails?.designNumber || null,
-        designName: orderDetails?.designName || null
+        orderDetails: {
+          orderNumber: orderDetails?.orderNumber || null,
+          designNumber: orderDetails?.designNumber || null,
+          designName: orderDetails?.designName || null
+        }
       };
 
-      // Save to localStorage for now (until backend is implemented)
-      const existingOrders = JSON.parse(localStorage.getItem('processingOrders') || '[]');
-      existingOrders.push(orderData);
-      localStorage.setItem('processingOrders', JSON.stringify(existingOrders));
-
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await axios.post(buildApiUrl('processing-orders'), orderData);
       
       setSuccessMessage(`Processing order ${orderFormNumber} created successfully!`);
       setConfirmDialogOpen(true);
 
     } catch (error) {
       console.error('Error submitting processing order:', error);
-      setErrorMessage('Failed to create processing order. Please try again.');
+      setErrorMessage(error.response?.data?.message || 'Failed to create processing order. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -460,14 +435,15 @@ function ProcessingOrderForm({ onClose }) {
           .logo {
             width: 60px;
             height: 60px;
-            background-color: rgba(255,255,255,0.2);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: bold;
-            color: white;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 4px;
+          }
+          .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 4px;
           }
           .company-info {
             text-align: left;
@@ -618,7 +594,7 @@ function ProcessingOrderForm({ onClose }) {
           <div class="header">
             <div class="logo-section">
               <div class="logo">
-                AT
+                <img src="/AT-Logo.png" alt="Ashok Textiles Logo" />
               </div>
               <div class="company-info">
                 <div class="company-name">ASHOK TEXTILES</div>

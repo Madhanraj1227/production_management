@@ -22,6 +22,7 @@ import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturi
 import SendIcon from '@mui/icons-material/Send';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import BusinessIcon from '@mui/icons-material/Business';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 
 const drawerWidth = 240;
 
@@ -32,6 +33,7 @@ const menuItems = [
     { text: 'Warps', icon: <ViewWeekIcon />, path: '/warps' },
     { text: 'Fabric Cuts', icon: <ContentCutIcon />, path: '/fabric-cuts' },
     { text: 'Loom-In', icon: <AllInboxIcon />, path: '/loom-in' },
+    { text: 'Fabric Movement', icon: <LocalShippingIcon />, path: '/fabric-movement' },
     { text: 'Inspection Reports', icon: <AssessmentIcon />, path: '/inspection-reports' },
     { text: 'Finances', icon: <AccountBalanceIcon />, path: '/finances' },
 ];

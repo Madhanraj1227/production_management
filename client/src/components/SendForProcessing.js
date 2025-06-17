@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -39,23 +39,18 @@ import {
   Send as SendIcon,
   Add as AddIcon,
   Visibility as VisibilityIcon,
-  QrCode as QrCodeIcon,
   Business as BusinessIcon,
   LocalShipping as LocalShippingIcon,
   Print as PrintIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
-  Search as SearchIcon,
   FilterList as FilterListIcon,
   CalendarToday as CalendarTodayIcon,
   Assignment as AssignmentIcon,
-  TrendingUp as TrendingUpIcon,
   ExpandMore as ExpandMoreIcon,
   MoveToInbox as ReceiveIcon,
-  AddCircleOutline as AddCircleOutlineIcon,
-  RemoveCircleOutline as RemoveCircleOutlineIcon,
   Save as SaveIcon,
-  AssignmentTurnedIn as AssignmentTurnedInIcon
+  AssignmentTurnedIn as AssignmentTurnedInIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -87,6 +82,13 @@ function SendForProcessing() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Add new state for edit/delete delivery functionality
+  const [editDeliveryDialogOpen, setEditDeliveryDialogOpen] = useState(false);
+  const [deleteDeliveryDialogOpen, setDeleteDeliveryDialogOpen] = useState(false);
+  const [deliveryToEdit, setDeliveryToEdit] = useState(null);
+  const [deliveryToDelete, setDeliveryToDelete] = useState(null);
+  const [orderToModify, setOrderToModify] = useState(null);
+
   useEffect(() => {
     fetchProcessingOrders();
   }, []);
@@ -115,36 +117,7 @@ function SendForProcessing() {
 
   }, [processingOrders]);
 
-  useEffect(() => {
-    applyFilters();
-  }, [processingOrders, orderNumberFilter, processingCenterFilter, statusFilter]);
-
-  const fetchProcessingOrders = async () => {
-    try {
-      setLoading(true);
-      // TODO: Replace with actual API call
-      // const response = await axios.get(buildApiUrl('processing-orders'));
-      // setProcessingOrders(response.data);
-      
-      // Load orders from localStorage for now
-      const existingOrders = JSON.parse(localStorage.getItem('processingOrders') || '[]');
-      
-      // Ensure each order has a createdAt date if not present
-      const ordersWithCreatedAt = existingOrders.map(order => ({
-        ...order,
-        createdAt: order.createdAt || new Date().toISOString()
-      }));
-      
-      setProcessingOrders(ordersWithCreatedAt);
-      setFilteredOrders(ordersWithCreatedAt);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch processing orders');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyFilters = () => {
+  const applyFiltersCallback = useCallback(() => {
     let filtered = processingOrders;
 
     // Filter by order number
@@ -186,7 +159,36 @@ function SendForProcessing() {
     });
 
     setFilteredOrders(ordersWithGroupedCuts);
+  }, [processingOrders, orderNumberFilter, processingCenterFilter, statusFilter]);
+
+  useEffect(() => {
+    applyFiltersCallback();
+  }, [applyFiltersCallback]);
+
+  const fetchProcessingOrders = async () => {
+    try {
+      setLoading(true);
+      // Fetch from API
+      const response = await axios.get(buildApiUrl('processing-orders'));
+      const existingOrders = response.data;
+      
+      // Ensure each order has required fields if not present
+      const ordersWithDefaults = existingOrders.map(order => ({
+        ...order,
+        createdAt: order.createdAt || new Date().toISOString(),
+        status: order.status || 'sent'
+      }));
+      
+      setProcessingOrders(ordersWithDefaults);
+      setFilteredOrders(ordersWithDefaults);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch processing orders');
+    } finally {
+      setLoading(false);
+    }
   };
+
+
 
   const getUniqueProcessingCenters = () => {
     const centers = [...new Set(processingOrders.map(order => order.processingCenter))];
@@ -223,10 +225,24 @@ function SendForProcessing() {
     );
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+  const formatDate = (dateInput) => {
+    if (!dateInput) return 'N/A';
     try {
-      const date = new Date(dateString);
+      let date;
+      
+      // Handle Firestore timestamp format
+      if (dateInput && typeof dateInput === 'object' && dateInput._seconds) {
+        date = new Date(dateInput._seconds * 1000);
+      } 
+      // Handle Firestore timestamp with toDate() method
+      else if (dateInput && typeof dateInput.toDate === 'function') {
+        date = dateInput.toDate();
+      }
+      // Handle regular date string/object
+      else {
+        date = new Date(dateInput);
+      }
+      
       if (isNaN(date.getTime())) return 'N/A';
       return date.toLocaleDateString('en-IN', {
         day: '2-digit',
@@ -259,15 +275,7 @@ function SendForProcessing() {
     };
   };
 
-  const handleEditOrder = (order) => {
-    // Navigate to edit mode - we can pass the order data as state
-    navigate('/processing/create-order', { 
-      state: { 
-        editMode: true, 
-        orderData: order 
-      } 
-    });
-  };
+
 
   const handleDeleteClick = (order) => {
     setOrderToDelete(order);
@@ -294,13 +302,8 @@ function SendForProcessing() {
 
     setDeleting(true);
     try {
-      // TODO: Replace with actual API call
-      // await axios.delete(buildApiUrl(`processing-orders/${orderToDelete.id}`));
-      
-      // For now, remove from localStorage
-      const existingOrders = JSON.parse(localStorage.getItem('processingOrders') || '[]');
-      const updatedOrders = existingOrders.filter(order => order.id !== orderToDelete.id);
-      localStorage.setItem('processingOrders', JSON.stringify(updatedOrders));
+      // Delete from API
+      await axios.delete(buildApiUrl(`processing-orders/${orderToDelete.id}`));
       
       // Refresh the orders list
       await fetchProcessingOrders();
@@ -386,14 +389,15 @@ function SendForProcessing() {
           .logo {
             width: 60px;
             height: 60px;
-            background-color: rgba(255,255,255,0.2);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: bold;
-            color: white;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 4px;
+          }
+          .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 4px;
           }
           .company-info {
             text-align: left;
@@ -571,7 +575,7 @@ function SendForProcessing() {
           <div class="header">
             <div class="logo-section">
               <div class="logo">
-                AT
+                <img src="/AT-Logo.png" alt="Ashok Textiles Logo" />
               </div>
               <div class="company-info">
                 <div class="company-name">ASHOK TEXTILES</div>
@@ -679,6 +683,39 @@ function SendForProcessing() {
   const handleReceiveDialogClose = () => {
     setReceiveDialogOpen(false);
     setOrderToReceive(null);
+  };
+
+  // Handler functions for edit/delete delivery functionality
+  const handleEditDelivery = (order, delivery, cuts, deliveryIndex) => {
+    setOrderToModify(order);
+    setDeliveryToEdit({
+      ...delivery,
+      cuts: cuts,
+      deliveryIndex: deliveryIndex
+    });
+    setEditDeliveryDialogOpen(true);
+  };
+
+  const handleDeleteDelivery = (order, delivery, cuts, deliveryIndex) => {
+    setOrderToModify(order);
+    setDeliveryToDelete({
+      ...delivery,
+      cuts: cuts,
+      deliveryIndex: deliveryIndex
+    });
+    setDeleteDeliveryDialogOpen(true);
+  };
+
+  const handleEditDeliveryClose = () => {
+    setEditDeliveryDialogOpen(false);
+    setDeliveryToEdit(null);
+    setOrderToModify(null);
+  };
+
+  const handleDeleteDeliveryClose = () => {
+    setDeleteDeliveryDialogOpen(false);
+    setDeliveryToDelete(null);
+    setOrderToModify(null);
   };
 
   if (loading) {
@@ -988,12 +1025,12 @@ function SendForProcessing() {
                             {order.orderFormNumber}
                           </TableCell>
                           <TableCell sx={{ fontWeight: '500' }}>
-                            {order.orderNumber || 'N/A'}
+                            {order.orderDetails?.orderNumber || 'N/A'}
                           </TableCell>
                           <TableCell>
                             <Box>
-                              <Typography variant="body2" sx={{ fontWeight: '600' }}>{order.designName || 'N/A'}</Typography>
-                              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{order.designNumber || 'N/A'}</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: '600' }}>{order.orderDetails?.designName || 'N/A'}</Typography>
+                              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{order.orderDetails?.designNumber || 'N/A'}</Typography>
                             </Box>
                           </TableCell>
                           <TableCell>
@@ -1007,7 +1044,7 @@ function SendForProcessing() {
                               {order.totalQuantity?.toFixed(2)}m
                             </Typography>
                             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                              {order.totalFabricCuts} cuts
+                              {order.totalFabricCuts || order.fabricCuts?.length || 0} cuts
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -1147,9 +1184,11 @@ function SendForProcessing() {
                                                       <TableCell sx={{fontWeight: 'bold'}}>Received Date</TableCell>
                                                       <TableCell sx={{fontWeight: 'bold'}}>Delivery No.</TableCell>
                                                       <TableCell sx={{fontWeight: 'bold'}}>Received By</TableCell>
+                                                      <TableCell sx={{fontWeight: 'bold'}}>Location</TableCell>
                                                       <TableCell align="right" sx={{fontWeight: 'bold'}}>Cuts</TableCell>
                                                       <TableCell align="right" sx={{fontWeight: 'bold'}}>Quantity (m)</TableCell>
                                                       <TableCell sx={{fontWeight: 'bold'}}>New Fabric No(s).</TableCell>
+                                                      <TableCell sx={{fontWeight: 'bold'}}>Actions</TableCell>
                                                     </TableRow>
                                                   </TableHead>
                                                   <TableBody>
@@ -1171,11 +1210,32 @@ function SendForProcessing() {
                                                             <TableCell>{formatDate(receivedDate)}</TableCell>
                                                             <TableCell>{delivery.deliveryNumber}</TableCell>
                                                             <TableCell>{delivery.receivedBy || 'N/A'}</TableCell>
+                                                            <TableCell>{delivery.location || 'N/A'}</TableCell>
                                                             <TableCell align="right">{cutsForThisDelivery.length}</TableCell>
                                                             <TableCell align="right">
                                                               {cutsForThisDelivery.reduce((acc, cut) => acc + (cut.quantity || 0), 0).toFixed(2)}
                                                             </TableCell>
                                                             <TableCell>{cutsForThisDelivery.map(c => c.newFabricNumber).join(', ')}</TableCell>
+                                                            <TableCell>
+                                                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                                                <IconButton
+                                                                  size="small"
+                                                                  onClick={() => handleEditDelivery(order, delivery, cutsForThisDelivery, index)}
+                                                                  sx={{ color: '#1976d2' }}
+                                                                  title="Edit Delivery"
+                                                                >
+                                                                  <EditIcon fontSize="small" />
+                                                                </IconButton>
+                                                                <IconButton
+                                                                  size="small"
+                                                                  onClick={() => handleDeleteDelivery(order, delivery, cutsForThisDelivery, index)}
+                                                                  sx={{ color: '#d32f2f' }}
+                                                                  title="Delete Delivery"
+                                                                >
+                                                                  <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                              </Box>
+                                                            </TableCell>
                                                           </TableRow>
                                                         );
                                                       });
@@ -1271,10 +1331,10 @@ function SendForProcessing() {
                     <CardContent sx={{ py: 2 }}>
                       <Typography variant="body2" color="textSecondary">Design</Typography>
                       <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#e91e63' }}>
-                        {orderToView.designName || 'N/A'}
+                        {orderToView.orderDetails?.designName || 'N/A'}
                       </Typography>
                       <Typography variant="body2" color="textSecondary">
-                        ({orderToView.designNumber || 'N/A'})
+                        ({orderToView.orderDetails?.designNumber || 'N/A'})
                       </Typography>
                     </CardContent>
                   </Card>
@@ -1406,11 +1466,29 @@ function SendForProcessing() {
       </Dialog>
 
       {/* Receive Fabric Dialog */}
-      <ReceiveFabricDialog
+            <ReceiveFabricDialog 
         open={receiveDialogOpen}
         onClose={handleReceiveDialogClose}
         order={orderToReceive}
         onReceiveComplete={fetchProcessingOrders}
+      />
+
+      {/* Delete Delivery Dialog */}
+      <DeleteDeliveryDialog 
+        open={deleteDeliveryDialogOpen}
+        onClose={handleDeleteDeliveryClose}
+        delivery={deliveryToDelete}
+        order={orderToModify}
+        onDeleteComplete={fetchProcessingOrders}
+      />
+
+      {/* Edit Delivery Dialog */}
+      <EditDeliveryDialog 
+        open={editDeliveryDialogOpen}
+        onClose={handleEditDeliveryClose}
+        delivery={deliveryToEdit}
+        order={orderToModify}
+        onEditComplete={fetchProcessingOrders}
       />
     </Container>
   );
@@ -1421,54 +1499,208 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
   const [numberOfCuts, setNumberOfCuts] = useState('');
   const [receivedCuts, setReceivedCuts] = useState([]);
   const [receivedBy, setReceivedBy] = useState('');
+  const [location, setLocation] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const totalCutsAlreadyReceived = order?.receivedFabricCuts?.length || 0;
-  const maxAllowedCuts = order ? order.totalFabricCuts - totalCutsAlreadyReceived : 0;
+  const totalSentCuts = order?.totalFabricCuts || order?.fabricCuts?.length || 0;
+  const maxAllowedCuts = order ? Math.max(0, totalSentCuts - totalCutsAlreadyReceived) : 0;
   const totalReceivedQty = receivedCuts.reduce((sum, cut) => sum + (parseFloat(cut.quantity) || 0), 0);
+  
+  // Calculate quantity validation
+  const totalSentQuantity = order?.totalQuantity || 0;
+  const alreadyReceivedQuantity = order?.receivedFabricCuts?.reduce((sum, cut) => sum + (cut.quantity || 0), 0) || 0;
+  const balanceQuantity = Math.max(0, totalSentQuantity - alreadyReceivedQuantity);
+  const maxAllowedQuantity = balanceQuantity;
+
+  const handleQuantityChange = useCallback((id, value) => {
+    setReceivedCuts(prev => prev.map(cut => 
+      cut.id === id ? { ...cut, quantity: value } : cut
+    ));
+  }, []);
 
   useEffect(() => {
-    // When the dialog opens, reset state
-    if (order) {
+    if (open) {
       setDeliveryNumber('');
       setNumberOfCuts('');
       setReceivedCuts([]);
       setReceivedBy('');
+      setLocation('');
       setError('');
       setSubmitting(false);
     }
-  }, [open, order]);
+  }, [open]);
 
   useEffect(() => {
     const num = parseInt(numberOfCuts, 10);
-    if (order && !isNaN(num) && num > 0) {
-      const maxAllowed = order.totalFabricCuts - (order.receivedFabricCuts?.length || 0);
-      
-      if (num > maxAllowed) {
-        setError(`Cannot receive more than ${maxAllowed} cuts. You have already received ${order.receivedFabricCuts?.length || 0} out of ${order.totalFabricCuts} cuts.`);
+    if (!isNaN(num) && num > 0 && order) {
+      if (num > maxAllowedCuts) {
+        setError(`Cannot receive more than ${maxAllowedCuts} cuts. You have already received ${totalCutsAlreadyReceived} out of ${totalSentCuts} cuts.`);
+        setReceivedCuts([]);
         return;
       }
 
-      const numToCreate = Math.min(num, maxAllowed);
-
+      const numToCreate = Math.min(num, maxAllowedCuts);
       const newCuts = Array.from({ length: numToCreate }, (_, i) => ({
         id: i + 1,
         quantity: receivedCuts[i]?.quantity || ''
       }));
       setReceivedCuts(newCuts);
+      setError('');
     } else {
       setReceivedCuts([]);
       if (numberOfCuts !== '') {
         setError('');
       }
     }
-  }, [numberOfCuts, order, open]);
+  }, [numberOfCuts, order, maxAllowedCuts, totalCutsAlreadyReceived, totalSentCuts]);
 
-  const handleQuantityChange = (id, value) => {
-    setReceivedCuts(prev => prev.map(cut => 
-      cut.id === id ? { ...cut, quantity: value } : cut
-    ));
+  const handleSubmit = async () => {
+    try {
+      // Additional validation
+      if (!order || !order.orderFormNumber) {
+        setError('Invalid order information. Please try again.');
+        return;
+      }
+
+      // Validation
+      if (!deliveryNumber.trim()) {
+        setError('Please enter the delivery number from the processing center.');
+        return;
+      }
+
+      if (!receivedBy.trim()) {
+        setError('Please enter who received the fabric.');
+        return;
+      }
+
+      if (!location.trim()) {
+        setError('Please select the location where fabric was received.');
+        return;
+      }
+
+      if (receivedCuts.length === 0) {
+        setError('Please specify the number of cuts to receive.');
+        return;
+      }
+
+      // Check if number of cuts exceeds maximum allowed
+      if (receivedCuts.length > maxAllowedCuts) {
+        setError(`Cannot receive ${receivedCuts.length} cuts. Maximum allowed is ${maxAllowedCuts} cuts.`);
+        return;
+      }
+
+      const invalidCuts = receivedCuts.filter(cut => !cut.quantity || parseFloat(cut.quantity) <= 0);
+      if (invalidCuts.length > 0) {
+        setError('Please enter valid quantities for all fabric cuts.');
+        return;
+      }
+
+      // Check if total receiving quantity exceeds balance quantity
+      if (totalReceivedQty > maxAllowedQuantity) {
+        setError(`Total receiving quantity (${totalReceivedQty.toFixed(2)}m) exceeds balance quantity (${maxAllowedQuantity.toFixed(2)}m). Total sent: ${totalSentQuantity.toFixed(2)}m, Already received: ${alreadyReceivedQuantity.toFixed(2)}m.`);
+        return;
+      }
+
+      setError('');
+      setSubmitting(true);
+
+      // Prepare the payload
+      const payload = {
+        deliveryNumber: deliveryNumber.trim(),
+        receivedBy: receivedBy.trim(),
+        location: location.trim(),
+        cuts: receivedCuts.map(cut => ({
+          quantity: parseFloat(cut.quantity)
+        }))
+      };
+
+      // Generate new fabric numbers for the received cuts
+      const orderNumberPart = order.orderFormNumber ? order.orderFormNumber.split('/').pop() || '00001' : '00001';
+      
+      // Get all existing fabric numbers for this order to find the next available number
+      const existingFabricNumbers = new Set();
+      if (order.receivedFabricCuts) {
+        order.receivedFabricCuts.forEach(cut => {
+          if (cut.newFabricNumber) {
+            existingFabricNumbers.add(cut.newFabricNumber);
+          }
+        });
+      }
+      
+      // Function to find next available fabric number
+      const getNextAvailableFabricNumber = (orderPart, existingNumbers) => {
+        let cutNumber = 1;
+        let fabricNumber;
+        do {
+          const cutNumberStr = String(cutNumber).padStart(2, '0');
+          fabricNumber = `WR/${orderPart}/${cutNumberStr}`;
+          cutNumber++;
+        } while (existingNumbers.has(fabricNumber));
+        return fabricNumber;
+      };
+      
+      const newReceivedCuts = payload.cuts.map((cut, index) => {
+        const fabricNumber = getNextAvailableFabricNumber(orderNumberPart, existingFabricNumbers);
+        existingFabricNumbers.add(fabricNumber); // Add to set to avoid duplicates in this batch
+        
+        return {
+          id: `${order.id}-${Date.now() + index}`,
+          newFabricNumber: fabricNumber,
+          quantity: cut.quantity,
+          receivedAt: new Date().toISOString(),
+          processingCenter: order.processingCenter || '',
+          location: payload.location,
+          deliveryNumber: payload.deliveryNumber,
+          receivedBy: payload.receivedBy,
+        };
+      });
+
+      // Update the order with new received cuts
+      const updatedOrder = {
+        ...order,
+        receivedFabricCuts: [...(order.receivedFabricCuts || []), ...newReceivedCuts],
+        status: newReceivedCuts.length + totalCutsAlreadyReceived >= totalSentCuts ? 'completed' : 'partially_received',
+        deliveryHistory: [...(order.deliveryHistory || []), {
+          deliveryNumber: deliveryNumber.trim(),
+          date: new Date().toISOString(),
+          cutsReceived: newReceivedCuts.length,
+          totalQuantityReceived: newReceivedCuts.reduce((sum, cut) => sum + cut.quantity, 0),
+          receivedBy: receivedBy.trim(),
+          location: payload.location
+        }]
+      };
+
+      // Update via API
+      await axios.put(buildApiUrl(`processing-orders/${order.id}`), updatedOrder);
+
+      // Generate and print QR code stickers
+      const stickers = newReceivedCuts.map(cut => ({
+        fabricNumber: cut.newFabricNumber,
+        orderNumber: order.orderDetails?.orderNumber || 'N/A',
+        designNumber: order.orderDetails?.designNumber || 'N/A',
+        designName: order.orderDetails?.designName || 'N/A',
+        quantity: cut.quantity,
+        location: cut.location
+      }));
+
+      const stickerHTML = await generateStickerSheetHTML(stickers);
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(stickerHTML);
+        printWindow.document.close();
+      }
+
+      onReceiveComplete();
+      onClose();
+
+    } catch (err) {
+      console.error('Error in handleSubmit:', err);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Function to generate QR sticker sheet HTML
@@ -1476,7 +1708,7 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
     // Generate QR codes for each sticker
     const stickersWithQR = await Promise.all(stickers.map(async (sticker, index) => {
       try {
-        const qrData = `WR/${sticker.fabricNumber}/${sticker.orderNumber}/${sticker.designNumber}`;
+        const qrData = sticker.fabricNumber;
         const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
           errorCorrectionLevel: 'M',
           type: 'image/png',
@@ -1521,6 +1753,10 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
             <div class="info-row">
               <span class="label">Fabric No:</span>
               <span class="value">${sticker.fabricNumber}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Location:</span>
+              <span class="value">${sticker.location || 'N/A'}</span>
             </div>
           </div>
         </div>
@@ -1632,96 +1868,6 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
     `;
   };
 
-  const handleSubmit = async () => {
-    // Validation
-    if (!deliveryNumber.trim()) {
-      setError('Please enter the delivery number from the processing center.');
-      return;
-    }
-
-    if (!receivedBy.trim()) {
-      setError('Please enter who received the fabric.');
-      return;
-    }
-
-    if (receivedCuts.length === 0) {
-      setError('Please specify the number of cuts to receive.');
-      return;
-    }
-
-    const invalidCuts = receivedCuts.filter(cut => !cut.quantity || parseFloat(cut.quantity) <= 0);
-    if (invalidCuts.length > 0) {
-      setError('Please enter valid quantities for all fabric cuts.');
-      return;
-    }
-
-    setError('');
-    setSubmitting(true);
-
-    try {
-      // Prepare the payload
-      const payload = {
-        deliveryNumber,
-        receivedBy,
-        cuts: receivedCuts.map(cut => ({
-          quantity: parseFloat(cut.quantity)
-        }))
-      };
-
-      // Generate new fabric numbers for the received cuts
-      const newReceivedCuts = payload.cuts.map((cut, index) => ({
-        id: Date.now() + index,
-        newFabricNumber: `WR/${order.orderFormNumber.split('/').pop()}/${String(index + 1 + totalCutsAlreadyReceived).padStart(4, '0')}`,
-        quantity: cut.quantity,
-        receivedAt: new Date().toISOString()
-      }));
-
-      // Update the order with new received cuts
-      const updatedOrder = {
-        ...order,
-        receivedFabricCuts: [...(order.receivedFabricCuts || []), ...newReceivedCuts],
-        status: newReceivedCuts.length + totalCutsAlreadyReceived >= order.totalFabricCuts ? 'completed' : 'partially_received',
-        deliveryHistory: [...(order.deliveryHistory || []), {
-          deliveryNumber,
-          date: new Date().toISOString(),
-          cutsReceived: newReceivedCuts.length,
-          totalQuantityReceived: newReceivedCuts.reduce((sum, cut) => sum + cut.quantity, 0),
-          receivedBy
-        }]
-      };
-
-      // Update in localStorage
-      const existingOrders = JSON.parse(localStorage.getItem('processingOrders') || '[]');
-      const updatedOrders = existingOrders.map(o => o.id === order.id ? updatedOrder : o);
-      localStorage.setItem('processingOrders', JSON.stringify(updatedOrders));
-
-      // Generate and print QR code stickers
-      const stickers = newReceivedCuts.map(cut => ({
-        fabricNumber: cut.newFabricNumber,
-        orderNumber: order.orderNumber,
-        designNumber: order.designNumber,
-        designName: order.designName,
-        quantity: cut.quantity
-      }));
-
-      const stickerHTML = await generateStickerSheetHTML(stickers);
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(stickerHTML);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-
-      onReceiveComplete();
-      onClose();
-
-    } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f3f4f6' }}>
@@ -1757,6 +1903,18 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
                       onChange={(e) => setReceivedBy(e.target.value)}
                       sx={{ mb: 2 }}
                     />
+                    <FormControl fullWidth sx={{ mb: 2 }}>
+                      <InputLabel>Location</InputLabel>
+                      <Select
+                        value={location}
+                        label="Location"
+                        onChange={(e) => setLocation(e.target.value)}
+                      >
+                        <MenuItem value="">Select Location</MenuItem>
+                        <MenuItem value="Veerapandi">Veerapandi</MenuItem>
+                        <MenuItem value="Salem">Salem</MenuItem>
+                      </Select>
+                    </FormControl>
                     <TextField
                       fullWidth
                       type="number"
@@ -1817,13 +1975,41 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
                   Summary
                 </Typography>
                 <Divider sx={{ my: 1 }} />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1.5 }}>
-                  <Typography>Fabrics Sent:</Typography>
-                  <Typography sx={{ fontWeight: 'bold' }}>{order?.totalFabricCuts} cuts</Typography>
+                
+                {/* Quantity Summary */}
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1, color: '#1976d2' }}>
+                  Quantity Overview:
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                  <Typography variant="body2">Total Sent Quantity:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#1976d2' }}>{totalSentQuantity.toFixed(2)} m</Typography>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1.5 }}>
-                  <Typography>Fabrics Already Received:</Typography>
-                  <Typography sx={{ fontWeight: 'bold' }}>{totalCutsAlreadyReceived} cuts</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                  <Typography variant="body2">Already Received:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>{alreadyReceivedQuantity.toFixed(2)} m</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1, p: 1, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffcc02' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Balance to Receive:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#f57c00' }}>{balanceQuantity.toFixed(2)} m</Typography>
+                </Box>
+                
+                <Divider sx={{ my: 2 }} />
+                
+                {/* Cuts Summary */}
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1, color: '#666' }}>
+                  Cuts Overview:
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                  <Typography variant="body2">Total Sent Cuts:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{order?.totalFabricCuts || order?.fabricCuts?.length || 0} cuts</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                  <Typography variant="body2">Already Received Cuts:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{totalCutsAlreadyReceived} cuts</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                  <Typography variant="body2">Cuts Available to Receive:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#666' }}>{maxAllowedCuts} cuts</Typography>
                 </Box>
 
                 <Typography variant="body2" sx={{ fontWeight: 'bold', mt: 2, color: '#666' }}>
@@ -1843,10 +2029,61 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
                   <Typography sx={{ fontWeight: 'bold' }}>Receiving Now:</Typography>
                   <Typography sx={{ fontWeight: 'bold' }}>{receivedCuts.length} cuts</Typography>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1.5, color: 'green' }}>
-                  <Typography sx={{ fontWeight: 'bold' }}>Total Received Qty:</Typography>
-                  <Typography sx={{ fontWeight: 'bold' }}>{totalReceivedQty.toFixed(2)} m</Typography>
+                <Divider sx={{ my: 2 }} />
+                
+                {/* Current Receiving Summary */}
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1, color: '#2e7d32' }}>
+                  Current Receiving:
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                  <Typography variant="body2">Receiving Now (Cuts):</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>{receivedCuts.length} cuts</Typography>
                 </Box>
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  my: 1, 
+                  p: 1, 
+                  borderRadius: 1,
+                  bgcolor: totalReceivedQty > maxAllowedQuantity ? '#ffebee' : '#e8f5e8',
+                  border: `1px solid ${totalReceivedQty > maxAllowedQuantity ? '#f44336' : '#4caf50'}`
+                }}>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Total Receiving Qty:</Typography>
+                  <Typography variant="body2" sx={{ 
+                    fontWeight: 'bold', 
+                    color: totalReceivedQty > maxAllowedQuantity ? '#d32f2f' : '#2e7d32'
+                  }}>
+                    {totalReceivedQty.toFixed(2)} m
+                  </Typography>
+                </Box>
+                
+                {totalReceivedQty > maxAllowedQuantity && (
+                  <Box sx={{ 
+                    p: 1, 
+                    bgcolor: '#ffebee', 
+                    border: '1px solid #f44336', 
+                    borderRadius: 1, 
+                    mt: 1 
+                  }}>
+                    <Typography variant="caption" sx={{ color: '#d32f2f', fontWeight: 'bold' }}>
+                      ⚠️ Exceeds balance quantity by {(totalReceivedQty - maxAllowedQuantity).toFixed(2)} m
+                    </Typography>
+                  </Box>
+                )}
+                
+                {totalReceivedQty <= maxAllowedQuantity && totalReceivedQty > 0 && (
+                  <Box sx={{ 
+                    p: 1, 
+                    bgcolor: '#e8f5e8', 
+                    border: '1px solid #4caf50', 
+                    borderRadius: 1, 
+                    mt: 1 
+                  }}>
+                    <Typography variant="caption" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
+                      ✅ Within allowed limit. Remaining: {(maxAllowedQuantity - totalReceivedQty).toFixed(2)} m
+                    </Typography>
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -1858,9 +2095,521 @@ function ReceiveFabricDialog({ open, onClose, order, onReceiveComplete }) {
           variant="contained" 
           onClick={handleSubmit}
           startIcon={submitting ? <CircularProgress size={20} /> : <SaveIcon />}
-          disabled={submitting || receivedCuts.length === 0}
+          disabled={submitting || receivedCuts.length === 0 || totalReceivedQty > maxAllowedQuantity}
         >
           {submitting ? 'Submitting...' : 'Submit & Generate QR'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// Delete Delivery Dialog Component
+function DeleteDeliveryDialog({ open, onClose, delivery, order, onDeleteComplete }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleDeleteConfirm = async () => {
+    if (!delivery || !order) return;
+
+    try {
+      setDeleting(true);
+      setError('');
+
+      // Remove the delivery from the order's delivery history
+      const updatedDeliveryHistory = order.deliveryHistory.filter((_, index) => index !== delivery.deliveryIndex);
+      
+      // Remove the associated fabric cuts from receivedFabricCuts
+      const updatedReceivedFabricCuts = order.receivedFabricCuts.filter(cut => 
+        cut.deliveryNumber !== delivery.deliveryNumber
+      );
+
+      // Calculate new status based on remaining received cuts
+      const totalSentCuts = order.totalFabricCuts || order.fabricCuts?.length || 0;
+      const newStatus = updatedReceivedFabricCuts.length === 0 ? 'sent' : 
+                       updatedReceivedFabricCuts.length >= totalSentCuts ? 'completed' : 'partially_received';
+
+      const updatedOrder = {
+        ...order,
+        deliveryHistory: updatedDeliveryHistory,
+        receivedFabricCuts: updatedReceivedFabricCuts,
+        status: newStatus
+      };
+
+      // Update via API
+      await axios.put(buildApiUrl(`processing-orders/${order.id}`), updatedOrder);
+
+      onDeleteComplete();
+      onClose();
+
+    } catch (err) {
+      console.error('Error deleting delivery:', err);
+      setError('Failed to delete delivery. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ color: '#d32f2f', fontWeight: 'bold' }}>
+        Delete Delivery
+      </DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        
+        <Typography variant="body1" gutterBottom>
+          Are you sure you want to delete this delivery?
+        </Typography>
+        
+        {delivery && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="body2"><strong>Delivery Number:</strong> {delivery.deliveryNumber}</Typography>
+            <Typography variant="body2"><strong>Received By:</strong> {delivery.receivedBy || 'N/A'}</Typography>
+            <Typography variant="body2"><strong>Location:</strong> {delivery.location || 'N/A'}</Typography>
+            <Typography variant="body2"><strong>Cuts Received:</strong> {delivery.cuts?.length || 0}</Typography>
+            <Typography variant="body2"><strong>Total Quantity:</strong> {delivery.cuts?.reduce((sum, cut) => sum + (cut.quantity || 0), 0).toFixed(2) || 0}m</Typography>
+          </Box>
+        )}
+        
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>Warning:</strong> This action cannot be undone. All fabric cuts associated with this delivery will be removed, and the order status will be updated accordingly.
+          </Typography>
+        </Alert>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={deleting}>
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleDeleteConfirm}
+          variant="contained"
+          color="error"
+          disabled={deleting}
+          startIcon={deleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+        >
+          {deleting ? 'Deleting...' : 'Delete Delivery'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// Edit Delivery Dialog Component
+function EditDeliveryDialog({ open, onClose, delivery, order, onEditComplete }) {
+  const [editedDelivery, setEditedDelivery] = useState({
+    deliveryNumber: '',
+    receivedBy: '',
+    location: '',
+    cuts: []
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open && delivery) {
+      setEditedDelivery({
+        deliveryNumber: delivery.deliveryNumber || '',
+        receivedBy: delivery.receivedBy || '',
+        location: delivery.location || '',
+        cuts: delivery.cuts?.map(cut => ({ ...cut })) || []
+      });
+      setError('');
+    }
+  }, [open, delivery]);
+
+  const handleCutQuantityChange = (cutIndex, newQuantity) => {
+    setEditedDelivery(prev => ({
+      ...prev,
+      cuts: prev.cuts.map((cut, index) => 
+        index === cutIndex ? { ...cut, quantity: parseFloat(newQuantity) || 0 } : cut
+      )
+    }));
+  };
+
+  const handleRemoveCut = (cutIndex) => {
+    setEditedDelivery(prev => ({
+      ...prev,
+      cuts: prev.cuts.filter((_, index) => index !== cutIndex)
+    }));
+  };
+
+  // Function to print QR sticker for a fabric cut
+  const handlePrintQRSticker = async (cut) => {
+    try {
+      // Generate QR code for the fabric cut
+      const qrCodeDataUrl = await QRCode.toDataURL(cut.newFabricNumber, {
+        errorCorrectionLevel: 'M',
+        type: 'image/png',
+        quality: 0.92,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+
+      const stickerHTML = `
+        <html>
+          <head>
+            <title>QR Sticker - ${cut.newFabricNumber}</title>
+            <style>
+              @page {
+                size: 9.5cm 5.5cm;
+                margin: 2mm;
+              }
+              @media print {
+                body { -webkit-print-color-adjust: exact; }
+              }
+              body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 2mm;
+                width: 9.1cm;
+                height: 5.1cm;
+                font-size: 8px;
+                overflow: hidden;
+              }
+              .sticker {
+                border: 1px solid #000;
+                padding: 2mm;
+                height: 100%;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+              }
+              .company-name {
+                text-align: center;
+                font-weight: bold;
+                font-size: 12px;
+                margin-bottom: 2mm;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 1mm;
+                flex-shrink: 0;
+              }
+              .content {
+                display: flex;
+                flex: 1;
+                min-height: 0;
+              }
+              .qr-section {
+                width: 45%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .qr-section img {
+                max-width: 32mm;
+                max-height: 32mm;
+              }
+              .info-section {
+                width: 55%;
+                padding-left: 2mm;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-around;
+              }
+              .info-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 0.5mm;
+              }
+              .label {
+                font-weight: bold;
+                color: #333;
+                font-size: 7px;
+              }
+              .value {
+                color: #000;
+                font-size: 7px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="sticker">
+              <div class="company-name">ASHOK TEXTILES</div>
+              <div class="content">
+                <div class="qr-section">
+                  <img src="${qrCodeDataUrl}" alt="QR Code" onload="window.qrLoaded = true" />
+                </div>
+                <div class="info-section">
+                  <div class="info-row">
+                    <span class="label">Order:</span>
+                    <span class="value">${order?.orderDetails?.orderNumber || order?.orderNumber || 'N/A'}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="label">Design:</span>
+                    <span class="value">${order?.orderDetails?.designName || order?.designName || 'N/A'}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="label">Design No:</span>
+                    <span class="value">${order?.orderDetails?.designNumber || order?.designNumber || 'N/A'}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="label">Quantity:</span>
+                    <span class="value">${cut.quantity}m</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="label">Fabric No:</span>
+                    <span class="value">${cut.newFabricNumber}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="label">Location:</span>
+                    <span class="value">${cut.location || editedDelivery.location || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <script>
+              window.qrLoaded = false;
+              function waitForQRAndPrint() {
+                if (window.qrLoaded) {
+                  // Wait an additional 100ms for the image to fully render
+                  setTimeout(() => {
+                    window.print();
+                    window.close();
+                  }, 100);
+                } else {
+                  // Check again in 50ms
+                  setTimeout(waitForQRAndPrint, 50);
+                }
+              }
+              // Start checking after the page loads
+              window.onload = function() {
+                waitForQRAndPrint();
+              };
+            </script>
+          </body>
+        </html>
+      `;
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(stickerHTML);
+        printWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error generating QR sticker:', error);
+      alert('Error generating QR sticker. Please try again.');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!delivery || !order) return;
+
+    try {
+      setSaving(true);
+      setError('');
+
+      // Validation
+      if (!editedDelivery.deliveryNumber.trim()) {
+        setError('Delivery number is required.');
+        return;
+      }
+
+      if (!editedDelivery.receivedBy.trim()) {
+        setError('Received by field is required.');
+        return;
+      }
+
+      if (!editedDelivery.location.trim()) {
+        setError('Location is required.');
+        return;
+      }
+
+      if (editedDelivery.cuts.length === 0) {
+        setError('At least one fabric cut is required.');
+        return;
+      }
+
+      // Check for invalid quantities
+      const invalidCuts = editedDelivery.cuts.filter(cut => !cut.quantity || cut.quantity <= 0);
+      if (invalidCuts.length > 0) {
+        setError('All fabric cuts must have valid quantities greater than 0.');
+        return;
+      }
+
+      // Update the order's delivery history
+      const updatedDeliveryHistory = order.deliveryHistory.map((del, index) => 
+        index === delivery.deliveryIndex ? {
+          ...del,
+          deliveryNumber: editedDelivery.deliveryNumber.trim(),
+          receivedBy: editedDelivery.receivedBy.trim(),
+          location: editedDelivery.location.trim(),
+          cutsReceived: editedDelivery.cuts.length,
+          totalQuantityReceived: editedDelivery.cuts.reduce((sum, cut) => sum + (cut.quantity || 0), 0)
+        } : del
+      );
+
+      // Update the receivedFabricCuts
+      const updatedReceivedFabricCuts = order.receivedFabricCuts.map(cut => {
+        if (cut.deliveryNumber === delivery.deliveryNumber) {
+          // Find the corresponding edited cut
+          const editedCut = editedDelivery.cuts.find(editCut => 
+            editCut.newFabricNumber === cut.newFabricNumber
+          );
+          if (editedCut) {
+            return {
+              ...cut,
+              deliveryNumber: editedDelivery.deliveryNumber.trim(),
+              receivedBy: editedDelivery.receivedBy.trim(),
+              location: editedDelivery.location.trim(),
+              quantity: editedCut.quantity
+            };
+          }
+          return null; // Cut was removed
+        }
+        return cut;
+      }).filter(Boolean); // Remove null values (removed cuts)
+
+      // Calculate new status
+      const totalSentCuts = order.totalFabricCuts || order.fabricCuts?.length || 0;
+      const newStatus = updatedReceivedFabricCuts.length === 0 ? 'sent' : 
+                       updatedReceivedFabricCuts.length >= totalSentCuts ? 'completed' : 'partially_received';
+
+      const updatedOrder = {
+        ...order,
+        deliveryHistory: updatedDeliveryHistory,
+        receivedFabricCuts: updatedReceivedFabricCuts,
+        status: newStatus
+      };
+
+      // Update via API
+      await axios.put(buildApiUrl(`processing-orders/${order.id}`), updatedOrder);
+
+      onEditComplete();
+      onClose();
+
+    } catch (err) {
+      console.error('Error updating delivery:', err);
+      setError('Failed to update delivery. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ color: '#1976d2', fontWeight: 'bold' }}>
+        Edit Delivery
+      </DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Delivery Number"
+              value={editedDelivery.deliveryNumber}
+              onChange={(e) => setEditedDelivery(prev => ({ ...prev, deliveryNumber: e.target.value }))}
+              required
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Received By"
+              value={editedDelivery.receivedBy}
+              onChange={(e) => setEditedDelivery(prev => ({ ...prev, receivedBy: e.target.value }))}
+              required
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <FormControl fullWidth required>
+              <InputLabel>Location</InputLabel>
+              <Select
+                value={editedDelivery.location}
+                label="Location"
+                onChange={(e) => setEditedDelivery(prev => ({ ...prev, location: e.target.value }))}
+              >
+                <MenuItem value="">Select Location</MenuItem>
+                <MenuItem value="Veerapandi">Veerapandi</MenuItem>
+                <MenuItem value="Salem">Salem</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+
+        <Typography variant="h6" sx={{ mt: 3, mb: 2, fontWeight: 'bold' }}>
+          Fabric Cuts
+        </Typography>
+        
+        {editedDelivery.cuts.length > 0 ? (
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Fabric Number</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Quantity (m)</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {editedDelivery.cuts.map((cut, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{cut.newFabricNumber}</TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        value={cut.quantity}
+                        onChange={(e) => handleCutQuantityChange(index, e.target.value)}
+                        inputProps={{ min: 0, step: 0.01 }}
+                        size="small"
+                        sx={{ width: 120 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => handlePrintQRSticker(cut)}
+                        title="Print QR Sticker"
+                        sx={{ mr: 1 }}
+                      >
+                        <PrintIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleRemoveCut(index)}
+                        title="Remove this cut"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        ) : (
+          <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center', py: 3 }}>
+            No fabric cuts remaining in this delivery.
+          </Typography>
+        )}
+
+        <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="body2">
+            <strong>Total Cuts:</strong> {editedDelivery.cuts.length}
+          </Typography>
+          <Typography variant="body2">
+            <strong>Total Quantity:</strong> {editedDelivery.cuts.reduce((sum, cut) => sum + (cut.quantity || 0), 0).toFixed(2)}m
+          </Typography>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSave}
+          variant="contained"
+          disabled={saving || editedDelivery.cuts.length === 0}
+          startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -27,6 +27,9 @@ import Finances from './components/Finances';
 import CreateProcessingCenter from './components/CreateProcessingCenter';
 import SendForProcessing from './components/SendForProcessing';
 import ProcessingOrderForm from './components/ProcessingOrderForm';
+import ReceiveFromProcessing from './components/ReceiveFromProcessing';
+import ReceiveFromProcessingHistory from './components/ReceiveFromProcessingHistory';
+import FabricMovement from './components/FabricMovement';
 
 const theme = createTheme({
   palette: {
@@ -138,7 +141,11 @@ function App() {
                 <Route path="/finances" element={<Finances />} />
                 <Route path="/processing/create-center" element={<CreateProcessingCenter />} />
                 <Route path="/processing/send" element={<SendForProcessing />} />
+                <Route path="/processing/receive" element={<ReceiveFromProcessingHistory />} />
+                <Route path="/processing/receive/scan" element={<ReceiveFromProcessing />} />
+                <Route path="/processing/receive/history" element={<ReceiveFromProcessingHistory />} />
                 <Route path="/processing/create-order" element={<ProcessingOrderForm />} />
+                <Route path="/fabric-movement" element={<FabricMovement />} />
                 <Route path="*" element={<Dashboard />} />
               </Routes>
             </Layout>

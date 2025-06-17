@@ -893,6 +893,7 @@ const LoomIn = () => {
                                     <TableCell><strong>Order Number</strong></TableCell>
                                     <TableCell><strong>Design Name</strong></TableCell>
                                     <TableCell><strong>Design Number</strong></TableCell>
+                                    <TableCell><strong>Place</strong></TableCell>
                                     <TableCell><strong>Loom-In Scanned Date</strong></TableCell>
                                     <TableCell><strong>Quantity (meters)</strong></TableCell>
                                 </TableRow>
@@ -913,6 +914,7 @@ const LoomIn = () => {
                                         <TableCell>{fabricCut.warp?.order?.orderNumber || fabricCut.warp?.order?.orderName || 'N/A'}</TableCell>
                                         <TableCell>{fabricCut.warp?.order?.designName || 'N/A'}</TableCell>
                                         <TableCell>{fabricCut.warp?.order?.designNumber || 'N/A'}</TableCell>
+                                        <TableCell>{fabricCut.location || 'N/A'}</TableCell>
                                         <TableCell>{formatDate(fabricCut.inspectionArrival)}</TableCell>
                                         <TableCell>{parseFloat(fabricCut.quantity || 0).toFixed(2)}</TableCell>
                                     </TableRow>

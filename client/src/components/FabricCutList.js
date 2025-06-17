@@ -724,11 +724,13 @@ function FabricCutList() {
                 <TableCell>Cut Info</TableCell>
                 <TableCell>Warp Details</TableCell>
                 <TableCell>Order Details</TableCell>
+                <TableCell>Location</TableCell>
                 <TableCell>Quantity (meters)</TableCell>
                 <TableCell>Created At</TableCell>
                 <TableCell>QR Code</TableCell>
                 <TableCell>Loom-In</TableCell>
                 <TableCell>4PT</TableCell>
+                <TableCell>Processing</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -769,6 +771,7 @@ function FabricCutList() {
                       </>
                     ) : 'N/A'}
                   </TableCell>
+                  <TableCell>{cut.location || 'N/A'}</TableCell>
                   <TableCell>{cut.quantity}</TableCell>
                   <TableCell>
                     {formatDate(cut.createdAt)}
@@ -795,6 +798,13 @@ function FabricCutList() {
                       <CheckCircleIcon style={{ color: 'green' }} />
                     ) : (
                       <CancelIcon style={{ color: 'red' }} />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {cut.isProcessing ? (
+                      <CheckCircleIcon color="success" />
+                    ) : (
+                      <CancelIcon color="error" />
                     )}
                   </TableCell>
                   <TableCell>

@@ -13,6 +13,7 @@ services:
       - server.js
       - package.json
       - build-for-render.js
+      - routes/**
     envVars:
       - key: NODE_ENV
         value: production
@@ -23,4 +24,15 @@ services:
       - key: DISABLE_ESLINT_PLUGIN
         value: true
       - key: CI
-        value: false 
+        value: false
+      - key: SKIP_PREFLIGHT_CHECK
+        value: true
+      - key: PORT
+        value: 10000
+    # Add environment variables for Firebase (will be set in Render dashboard)
+    # FIREBASE_PROJECT_ID
+    # FIREBASE_CLIENT_EMAIL  
+    # FIREBASE_PRIVATE_KEY_ID
+    # FIREBASE_PRIVATE_KEY
+    # FIREBASE_CLIENT_ID
+    # FIREBASE_CLIENT_CERT_URL 

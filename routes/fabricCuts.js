@@ -368,6 +368,22 @@ router.get('/optimized', async (req, res) => {
             inspectedCutIds.add(doc.data().fabricCutId);
         });
 
+        // Get all processing orders to check which cuts have been sent
+        const processingOrdersSnapshot = await db.collection('processingOrders').get();
+        const processingCutNumbers = new Set();
+        processingOrdersSnapshot.forEach(doc => {
+            const order = doc.data();
+            if (order.fabricCuts && Array.isArray(order.fabricCuts)) {
+                order.fabricCuts.forEach(cut => {
+                    if (cut.fabricNumber) {
+                        processingCutNumbers.add(cut.fabricNumber);
+                    }
+                });
+            }
+        });
+
+        console.log('Processing Cut Numbers Set:', Array.from(processingCutNumbers));
+
         // Batch fetch related data to minimize database calls
         const warpIds = [...new Set(allFabricCuts.map(cut => cut.warpId).filter(Boolean))];
         const warpsData = {};
@@ -442,10 +458,16 @@ router.get('/optimized', async (req, res) => {
                 };
             }
             
+            const isProcessing = processingCutNumbers.has(fabricCutData.fabricNumber);
+            if (fabricCutData.fabricNumber === 'W1-01' || fabricCutData.fabricNumber === 'W2-02') {
+              console.log(`Checking fabricNumber: ${fabricCutData.fabricNumber}, Is in Processing Set? ${isProcessing}`);
+            }
+
             return {
                 ...fabricCutData,
                 warp: enrichedWarp,
-                scannedAt4Point: inspectedCutIds.has(fabricCutData.id) || fabricCutData.scannedAt4Point
+                scannedAt4Point: inspectedCutIds.has(fabricCutData.id) || fabricCutData.scannedAt4Point,
+                isProcessing: isProcessing
             };
         });
         
@@ -836,6 +858,13 @@ router.post('/', async (req, res) => {
         const db = req.app.locals.db;
         const { warpId, fabricCuts } = req.body; // fabricCuts is an array of { quantity }
         
+        // Validation: Prevent creation of processing-received fabric cuts in main collection
+        if (req.body.fabricNumber && req.body.fabricNumber.startsWith('WR/')) {
+            return res.status(400).json({ 
+                message: 'Processing-received fabric cuts (WR/ prefixed) should not be created in the main fabric cuts collection. They belong in processing orders.' 
+            });
+        }
+        
         // Get warp and order information
         const warpDoc = await db.collection('warps').doc(warpId).get();
         if (!warpDoc.exists) {
@@ -893,6 +922,11 @@ router.post('/', async (req, res) => {
 
             const qrCode = await QRCode.toDataURL(qrData);
 
+            // Validation: Ensure we're not creating processing-received fabric cuts
+            if (fabricNumber.startsWith('WR/')) {
+                throw new Error(`Invalid fabric number format: ${fabricNumber}. WR/ prefixed numbers are reserved for processing-received cuts.`);
+            }
+            
             const fabricCutData = {
                 fabricNumber,
                 warpId: warpId,
@@ -900,6 +934,7 @@ router.post('/', async (req, res) => {
                 cutNumber: currentCutNumber,
                 totalCuts: fabricCuts.length,
                 qrCode,
+                location: 'Veerapandi', // Added location
                 // Store loom snapshot data for historical preservation
                 loomId: warp.loomId || null,
                 loomName: loomData ? loomData.loomName : null,
@@ -1818,18 +1853,52 @@ router.delete('/:id', async (req, res) => {
 
         const fabricCutData = doc.data();
         const wasInLoomIn = !!fabricCutData.inspectionArrival;
+        const fabricNumber = fabricCutData.fabricNumber;
         
-        await docRef.delete();
+        // Start a batch operation for atomic deletion
+        const batch = db.batch();
+        
+        // Delete the fabric cut
+        batch.delete(docRef);
+        
+        // Check if this fabric cut exists in processing receipts and delete them
+        const processingReceiptsSnapshot = await db.collection('processingReceipts')
+            .where('fabricNumber', '==', fabricNumber)
+            .get();
+        
+        const processingReceiptsSnapshot2 = await db.collection('processingReceipts')
+            .where('newFabricNumber', '==', fabricNumber)
+            .get();
+        
+        let deletedReceiptsCount = 0;
+        
+        // Delete matching processing receipts
+        processingReceiptsSnapshot.forEach(receiptDoc => {
+            batch.delete(receiptDoc.ref);
+            deletedReceiptsCount++;
+        });
+        
+        processingReceiptsSnapshot2.forEach(receiptDoc => {
+            batch.delete(receiptDoc.ref);
+            deletedReceiptsCount++;
+        });
+        
+        // Commit all deletions
+        await batch.commit();
         
         let message = 'Fabric cut deleted successfully';
         if (wasInLoomIn) {
             message += '. This fabric cut has been removed from loom-in history as well.';
         }
+        if (deletedReceiptsCount > 0) {
+            message += ` Associated processing receipts (${deletedReceiptsCount}) have been cleaned up.`;
+        }
         
         res.json({ 
             message: message,
             id: req.params.id,
-            wasInLoomInHistory: wasInLoomIn
+            wasInLoomInHistory: wasInLoomIn,
+            deletedReceiptsCount: deletedReceiptsCount
         });
     } catch (err) {
         console.error('Error deleting fabric cut:', err);
@@ -1962,6 +2031,11 @@ router.post('/split-fabric', async (req, res) => {
             
             const qrCode = await QRCode.toDataURL(qrData);
             
+            // Validation: Ensure we're not creating processing-received fabric cuts
+            if (fabricNumber.startsWith('WR/')) {
+                throw new Error(`Invalid fabric number format: ${fabricNumber}. WR/ prefixed numbers are reserved for processing-received cuts.`);
+            }
+            
             const newFabricCutData = {
                 fabricNumber,
                 warpId: originalFabric.warpId,
@@ -1973,6 +2047,7 @@ router.post('/split-fabric', async (req, res) => {
                 totalSubCuts: cutQuantities.length,
                 qrCode,
                 qrCodeData: qrCode, // Store QR code data for printing
+                location: originalFabric.location || 'Veerapandi', // Inherit or set new location
                 // Store loom snapshot data for historical preservation
                 loomId: originalFabric.loomId,
                 loomName: originalFabric.loomName || (loomData ? loomData.loomName : null),
@@ -2005,6 +2080,25 @@ router.post('/split-fabric', async (req, res) => {
         
         // Delete the original fabric cut
         batch.delete(db.collection('fabricCuts').doc(originalFabricId));
+        
+        // Check if original fabric exists in processing receipts and delete them
+        const originalFabricNumber = originalFabric.fabricNumber;
+        const processingReceiptsSnapshot = await db.collection('processingReceipts')
+            .where('fabricNumber', '==', originalFabricNumber)
+            .get();
+        
+        const processingReceiptsSnapshot2 = await db.collection('processingReceipts')
+            .where('newFabricNumber', '==', originalFabricNumber)
+            .get();
+        
+        // Delete matching processing receipts
+        processingReceiptsSnapshot.forEach(receiptDoc => {
+            batch.delete(receiptDoc.ref);
+        });
+        
+        processingReceiptsSnapshot2.forEach(receiptDoc => {
+            batch.delete(receiptDoc.ref);
+        });
         
         // Commit all changes
         await batch.commit();

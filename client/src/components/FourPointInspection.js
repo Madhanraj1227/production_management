@@ -61,12 +61,53 @@ const mistakeOptions = [
   'STRAIN'
 ];
 
-const dummyInspectors = [
-  'Inspector A',
-  'Inspector B', 
-  'Inspector C',
-  'Inspector D',
-  'Inspector E'
+const inspectors = [
+  'P.LAKSHMI',
+  'P.KAVITHA',
+  'R.SANGEETHA',
+  'N.AMUDHA',
+  'S.UMA',
+  'S.SUGANYA',
+  'M.GOWSALYA',
+  'P.JOTHIMANI',
+  'B.NALINI',
+  'K.THANGAYEE',
+  'K.USHA',
+  'T.MEENA',
+  'P.MEENA',
+  'S.SUGAPRIYA',
+  'E.LATHA',
+  'S.SARASU',
+  'E.GEETHA',
+  'M.DEIVARANI',
+  'S.UMARANI',
+  'G.SELVI',
+  'S.MENAKA',
+  'K.SUMATHI',
+  'S.VASANTHA',
+  'D.KODIYARASI',
+  'S.KAYALVIZHI',
+  'K.SHANTHI',
+  'R.KANNAKI',
+  'V.MALLIKA',
+  'B.JOTHI',
+  'V.MUTHAMMAL',
+  'G.MYNA',
+  'C.MUNIYAMMAL',
+  'R.GOWSALYA',
+  'S.KUMUTHA',
+  'S.THAMARAI SELVI',
+  'A.NITHYA',
+  'R.JENITHA',
+  'P.SELVAM',
+  'K.MATHINA',
+  'A.KALAIVANI',
+  'G.AMIRTHAVALLI',
+  'M.USHA',
+  'P.SARASWATHI',
+  'M.KRISHNAVENI',
+  'S.LATHA',
+  'S.KAVITHA'
 ];
 
 function FourPointInspection() {
@@ -590,7 +631,7 @@ function FourPointInspection() {
                     value={inspector1}
                     onChange={(e) => setInspector1(e.target.value)}
                   >
-                    {dummyInspectors.map((inspector) => (
+                    {inspectors.map((inspector) => (
                       <MenuItem key={inspector} value={inspector}>
                         {inspector}
                       </MenuItem>
@@ -606,7 +647,7 @@ function FourPointInspection() {
                     value={inspector2}
                     onChange={(e) => setInspector2(e.target.value)}
                   >
-                    {dummyInspectors.map((inspector) => (
+                    {inspectors.map((inspector) => (
                       <MenuItem key={inspector} value={inspector}>
                         {inspector}
                       </MenuItem>
