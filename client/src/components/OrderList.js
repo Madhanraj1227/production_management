@@ -45,6 +45,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import axios from 'axios';
 import { buildApiUrl } from '../config/api';
+import OrderDetailsModal from './OrderDetailsModal';
 
 function OrderList() {
   const navigate = useNavigate();
@@ -860,112 +861,12 @@ function OrderList() {
         </MenuItem>
       </Menu>
 
-      {/* Order Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          Order Details: {selectedOrder?.orderNumber}
-        </DialogTitle>
-        <DialogContent>
-          {selectedOrder && (
-            <Box>
-              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                Basic Information
-              </Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Order Number</Typography>
-                  <Typography variant="body1">{selectedOrder.orderNumber}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                  <Chip
-                    label={selectedOrder.status || 'NEW'}
-                    color={getStatusColor(selectedOrder.status)}
-                    size="small"
-                  />
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Type</Typography>
-                  <Chip
-                    label={selectedOrder.type ? selectedOrder.type.toUpperCase() : 'N/A'}
-                    color={getTypeColor(selectedOrder.type)}
-                    size="small"
-                  />
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Design Name</Typography>
-                  <Typography variant="body1">{selectedOrder.designName}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Design Number</Typography>
-                  <Typography variant="body1">{selectedOrder.designNumber}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Quantity</Typography>
-                  <Typography variant="body1">{selectedOrder.orderQuantity} meters</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Warping Quantity</Typography>
-                  <Typography variant="body1" color="secondary.main" fontWeight="bold">
-                    {selectedOrder.warpingQuantity ? `${selectedOrder.warpingQuantity} meters` : 'N/A'}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Count</Typography>
-                  <Typography variant="body1">{selectedOrder.count || 'N/A'}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Construction</Typography>
-                  <Typography variant="body1">{selectedOrder.construction || 'N/A'}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Merchandiser</Typography>
-                  <Typography variant="body1">{selectedOrder.merchandiser || 'N/A'}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Created Date</Typography>
-                  <Typography variant="body1">{formatDate(selectedOrder.createdAt)}</Typography>
-                </Box>
-              </Box>
-
-              {selectedOrder.files && Object.keys(selectedOrder.files).length > 0 && (
-                <>
-                  <Typography variant="h6" gutterBottom>
-                    Uploaded Documents
-                  </Typography>
-                  <List>
-                    {Object.entries(selectedOrder.files).map(([fileType, fileInfo]) => (
-                      <ListItem
-                        key={fileType}
-                        secondaryAction={
-                          <IconButton
-                            edge="end"
-                            onClick={() => handleDownload(selectedOrder.id, fileType)}
-                            color="primary"
-                          >
-                            <DownloadIcon />
-                          </IconButton>
-                        }
-                      >
-                        <ListItemIcon>
-                          {getFileIcon(fileInfo.filename)}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={fileType.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                          secondary={`${fileInfo.originalname} (${(fileInfo.size / 1024).toFixed(1)} KB)`}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </>
-              )}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      {/* Order Details Modal with Tabs */}
+      <OrderDetailsModal 
+        open={detailsOpen} 
+        onClose={() => setDetailsOpen(false)} 
+        order={selectedOrder} 
+      />
 
       {/* Edit Order Dialog */}
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="md" fullWidth>
@@ -1139,4 +1040,4 @@ function OrderList() {
   );
 }
 
-export default OrderList; 
+export default OrderList;

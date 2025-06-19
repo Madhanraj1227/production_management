@@ -995,6 +995,7 @@ function SendForProcessing() {
                     <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Processing Center</TableCell>
                     <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Sent Quantity (m)</TableCell>
                     <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Received Qty (m)</TableCell>
+                    <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Shortage</TableCell>
                     <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Delivery No.</TableCell>
                     <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Created On</TableCell>
                     <TableCell sx={{ color: 'white !important', fontWeight: 'bold', border: 0 }}>Delivery Date</TableCell>
@@ -1054,6 +1055,16 @@ function SendForProcessing() {
                             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                               {order.receivedFabricCuts?.length || 0} cuts
                             </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Box>
+                              <Typography sx={{ fontWeight: 'bold', color: '#d32f2f', fontSize: '1.1rem' }}>
+                                {(order.totalQuantity - (order.receivedFabricCuts?.reduce((sum, cut) => sum + (cut.quantity || 0), 0) || 0)).toFixed(2)}m
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                                {(((order.totalQuantity - (order.receivedFabricCuts?.reduce((sum, cut) => sum + (cut.quantity || 0), 0) || 0)) / order.totalQuantity) * 100).toFixed(1)}%
+                              </Typography>
+                            </Box>
                           </TableCell>
                           <TableCell>
                             {order.deliveryHistory?.map(d => d.deliveryNumber).join(', ') || 'N/A'}
@@ -1466,7 +1477,7 @@ function SendForProcessing() {
       </Dialog>
 
       {/* Receive Fabric Dialog */}
-            <ReceiveFabricDialog 
+      <ReceiveFabricDialog
         open={receiveDialogOpen}
         onClose={handleReceiveDialogClose}
         order={orderToReceive}
@@ -2616,4 +2627,4 @@ function EditDeliveryDialog({ open, onClose, delivery, order, onEditComplete }) 
   );
 }
 
-export default SendForProcessing; 
+export default SendForProcessing;

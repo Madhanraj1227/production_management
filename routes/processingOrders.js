@@ -169,6 +169,131 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get processing orders by order ID
+router.get('/by-order/:orderId', async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const { orderId } = req.params;
+    
+    if (!orderId) {
+      return res.status(400).json({ message: 'Order ID is required' });
+    }
+
+    // First, get the order to find its order number
+    let orderNumber = null;
+    try {
+      const orderDoc = await db.collection('orders').doc(orderId).get();
+      if (orderDoc.exists) {
+        orderNumber = orderDoc.data().orderNumber;
+      }
+    } catch (orderError) {
+      console.log('Could not fetch order details, proceeding with orderId only');
+    }
+
+    // Find processing orders that contain fabric cuts from the specified order
+    const snapshot = await db.collection('processingOrders').get();
+    
+    if (snapshot.empty) {
+      return res.json([]);
+    }
+
+    const processingOrders = [];
+    
+    for (const doc of snapshot.docs) {
+      const orderData = doc.data();
+      
+      // Check if this processing order contains fabric cuts from the specified order
+      let hasOrderFabricCuts = false;
+      
+      // Check in fabricCuts array (sent fabric cuts) - match by orderId or orderNumber
+      if (orderData.fabricCuts && Array.isArray(orderData.fabricCuts)) {
+        hasOrderFabricCuts = orderData.fabricCuts.some(cut => 
+          cut.orderId === orderId || 
+          cut.orderNumber === orderId ||
+          (orderNumber && cut.orderNumber === orderNumber)
+        );
+      }
+      
+      // Also check if order details match
+      if (!hasOrderFabricCuts && orderData.orderDetails) {
+        hasOrderFabricCuts = orderData.orderDetails.orderId === orderId || 
+                            orderData.orderDetails.id === orderId ||
+                            (orderNumber && orderData.orderDetails.orderNumber === orderNumber);
+      }
+      
+      if (hasOrderFabricCuts) {
+        // Prepare sent fabric cuts (from fabricCuts array)
+        const sentFabricCuts = (orderData.fabricCuts || []).map(cut => ({
+          cutNumber: cut.fabricNumber,
+          quantity: cut.inspectedQuantity || cut.quantity || 0,
+          dateSent: orderData.createdAt || orderData.deliveryDate,
+          ...cut
+        }));
+        
+        // Prepare received fabric cuts (from receivedFabricCuts array)
+        const receivedFabricCuts = (orderData.receivedFabricCuts || []).map(cut => ({
+          cutNumber: cut.newFabricNumber || cut.fabricNumber,
+          quantity: cut.quantity || 0,
+          dateReceived: cut.receivedAt,
+          deliveryNumber: cut.deliveryNumber,
+          ...cut
+        }));
+        
+        // Get processing center details
+        const processingCenter = orderData.processingCenter || {};
+        
+        // Handle processing center name properly
+        let processingCenterName = 'N/A';
+        if (typeof processingCenter === 'string') {
+          processingCenterName = processingCenter;
+        } else if (processingCenter && processingCenter.name) {
+          processingCenterName = processingCenter.name;
+        }
+        
+        // Determine status based on received fabric cuts
+        let status = orderData.status || 'sent';
+        if (receivedFabricCuts.length > 0) {
+          status = 'completed';
+        } else if (sentFabricCuts.length > 0) {
+          status = 'in-progress';
+        }
+        
+        processingOrders.push({
+          id: doc.id,
+          orderFormNumber: orderData.orderFormNumber,
+          processingCenter: {
+            name: processingCenterName,
+            ...(typeof processingCenter === 'object' ? processingCenter : {})
+          },
+          processes: orderData.processes || [],
+          sentFabricCuts,
+          receivedFabricCuts,
+          sentDate: orderData.createdAt || orderData.deliveryDate,
+          receivedDate: receivedFabricCuts.length > 0 ? 
+            receivedFabricCuts[receivedFabricCuts.length - 1].dateReceived : null,
+          status,
+          vehicleNumber: orderData.vehicleNumber,
+          deliveredBy: orderData.deliveredBy,
+          createdAt: orderData.createdAt,
+          updatedAt: orderData.updatedAt
+        });
+      }
+    }
+    
+    // Sort by creation date (newest first)
+    processingOrders.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return dateB - dateA;
+    });
+
+    res.json(processingOrders);
+  } catch (error) {
+    console.error('Error fetching processing orders by order ID:', error);
+    res.status(500).json({ message: 'Failed to fetch processing orders' });
+  }
+});
+
 // Update a processing order
 router.put('/:id', async (req, res) => {
   try {

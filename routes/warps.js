@@ -751,7 +751,7 @@ router.patch('/:id', async (req, res) => {
       // If marking warp as complete or stopped, set completion date and free up the loom
       if (req.body.status === 'complete' || req.body.status === 'stopped') {
         // Set completion date in the update data
-        updateData.completionDate = new Date();
+        updateData.completedAt = new Date();
         
         // Free up the loom if it exists
         const loomId = updateData.loomId || currentWarpData.loomId;

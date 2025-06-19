@@ -149,6 +149,52 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET inspections by order ID
+router.get('/by-order/:orderId', async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const { orderId } = req.params;
+
+    // 1. Find all warps for the given order
+    const warpsSnapshot = await db.collection('warps').where('orderId', '==', orderId).get();
+    if (warpsSnapshot.empty) {
+      return res.json([]);
+    }
+    const warpIds = warpsSnapshot.docs.map(doc => doc.id);
+
+    // 2. Find all fabric cuts for those warps
+    const fabricCutsSnapshot = await db.collection('fabricCuts').where('warpId', 'in', warpIds).get();
+    if (fabricCutsSnapshot.empty) {
+      return res.json([]);
+    }
+    const fabricCutIds = fabricCutsSnapshot.docs.map(doc => doc.id);
+
+    // 3. Find all inspections for those fabric cuts
+    const inspectionsSnapshot = await db.collection('inspections').where('fabricCutId', 'in', fabricCutIds).get();
+    const inspections = inspectionsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Create a map of fabric cuts for easy lookup
+    const fabricCutsMap = new Map();
+    fabricCutsSnapshot.docs.forEach(doc => {
+        fabricCutsMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
+
+    // Attach fabric cut data to each inspection
+    const enrichedInspections = inspections.map(inspection => ({
+        ...inspection,
+        fabricCut: fabricCutsMap.get(inspection.fabricCutId) || null
+    }));
+
+    res.json(enrichedInspections);
+  } catch (error) {
+    console.error('Error fetching inspections by order:', error);
+    res.status(500).json({ error: 'Failed to fetch inspections by order' });
+  }
+});
+
 // GET inspections by fabric cut ID
 router.get('/fabric-cut/:fabricCutId', async (req, res) => {
   try {

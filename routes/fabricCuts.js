@@ -462,7 +462,7 @@ router.get('/optimized', async (req, res) => {
             if (fabricCutData.fabricNumber === 'W1-01' || fabricCutData.fabricNumber === 'W2-02') {
               console.log(`Checking fabricNumber: ${fabricCutData.fabricNumber}, Is in Processing Set? ${isProcessing}`);
             }
-
+            
             return {
                 ...fabricCutData,
                 warp: enrichedWarp,
@@ -926,7 +926,7 @@ router.post('/', async (req, res) => {
             if (fabricNumber.startsWith('WR/')) {
                 throw new Error(`Invalid fabric number format: ${fabricNumber}. WR/ prefixed numbers are reserved for processing-received cuts.`);
             }
-            
+
             const fabricCutData = {
                 fabricNumber,
                 warpId: warpId,

@@ -24,7 +24,7 @@ services:
       - key: DISABLE_ESLINT_PLUGIN
         value: true
       - key: CI
-        value: false
+        value: false 
       - key: SKIP_PREFLIGHT_CHECK
         value: true
       - key: PORT

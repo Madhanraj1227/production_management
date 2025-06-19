@@ -114,7 +114,7 @@ function ReceiveFromProcessingHistory() {
       await fetchHistory(true); // Refresh data with sync
     } catch (err) {
       console.error('Error deleting receipt:', err);
-    }
+            }
   };
   
   const handleEditFormChange = (e) => {

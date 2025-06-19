@@ -112,7 +112,7 @@ function ProcessingOrderForm({ onClose }) {
   }, []);
 
   useEffect(() => {
-    generateQRCode();
+      generateQRCode();
   }, [generateQRCode]);
 
   useEffect(() => {
@@ -289,9 +289,9 @@ function ProcessingOrderForm({ onClose }) {
         status: 'sent',
         createdAt: new Date().toISOString(),
         orderDetails: {
-          orderNumber: orderDetails?.orderNumber || null,
-          designNumber: orderDetails?.designNumber || null,
-          designName: orderDetails?.designName || null
+        orderNumber: orderDetails?.orderNumber || null,
+        designNumber: orderDetails?.designNumber || null,
+        designName: orderDetails?.designName || null
         }
       };
 

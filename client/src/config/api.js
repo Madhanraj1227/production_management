@@ -1,10 +1,10 @@
 // API Configuration for Development and Production
 
 // In production, use relative URLs (same domain)
-// In development, use localhost:3001
+// In development, use localhost:3002
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
   ? '/api'  // Production: relative URLs
-  : 'http://localhost:3001/api';  // Development: localhost
+  : 'http://localhost:3002/api';  // Development: localhost
 
 export default API_BASE_URL;
 
@@ -16,14 +16,14 @@ export const buildApiUrl = (endpoint) => {
   if (process.env.NODE_ENV === 'production') {
     return `/api/${cleanEndpoint}`;
   } else {
-    return `http://localhost:3001/api/${cleanEndpoint}`;
+    return `http://localhost:3002/api/${cleanEndpoint}`;
   }
 };
 
 // Health check URL
 export const HEALTH_CHECK_URL = process.env.NODE_ENV === 'production' 
   ? '/health' 
-  : 'http://localhost:3001/health';
+  : 'http://localhost:3002/health';
 
 console.log('🔧 API Configuration:');
 console.log('Environment:', process.env.NODE_ENV);

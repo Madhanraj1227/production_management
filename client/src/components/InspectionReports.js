@@ -142,9 +142,7 @@ function InspectionReports() {
     setError('');
     try {
       // Force the API URL to use the correct endpoint
-      const apiUrl = process.env.NODE_ENV === 'production' 
-        ? '/api/inspections/4-point' 
-        : 'http://localhost:3001/api/inspections/4-point';
+      const apiUrl = buildApiUrl('inspections/4-point');
       
       console.log('Fetching inspections from:', apiUrl);
       

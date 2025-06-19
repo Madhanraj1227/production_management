@@ -69,16 +69,16 @@ function ReceiveFromProcessing() {
       const processingOrders = response.data;
       
       // Flatten all fabric cuts from received processing orders
-      const allCuts = processingOrders.flatMap(order =>
+    const allCuts = processingOrders.flatMap(order =>
         (order.receivedFabricCuts || []).map(cut => {
           console.log(`Processing received cut:`, cut);
           
           return {
             originalFabricNumber: cut.originalFabricNumber || 'N/A',
             newFabricNumber: cut.newFabricNumber,
-            orderFormNumber: order.orderFormNumber,
-            processingOrderId: order.id,
-            processingCenter: order.processingCenter,
+        orderFormNumber: order.orderFormNumber,
+        processingOrderId: order.id,
+        processingCenter: order.processingCenter,
             orderNumber: order.orderDetails?.orderNumber || order.orderNumber || 'N/A',
             designName: order.orderDetails?.designName || order.designName || 'N/A',
             designNumber: order.orderDetails?.designNumber || order.designNumber || 'N/A',
@@ -91,7 +91,7 @@ function ReceiveFromProcessing() {
       );
       
       console.log('All received fabric cuts for processing:', allCuts);
-      setAllGeneratedCuts(allCuts);
+    setAllGeneratedCuts(allCuts);
     } catch (err) {
       console.error('Failed to fetch processing orders:', err);
       setError('Failed to fetch processing orders');
@@ -173,12 +173,12 @@ function ReceiveFromProcessing() {
 
     try {
       const newReceipts = scannedCodes.map(code => ({
-        ...code,
-        fabricNumber: code.newFabricNumber,
-        receivedAt: code.scannedAt,
+          ...code,
+          fabricNumber: code.newFabricNumber,
+          receivedAt: code.scannedAt,
         receivedLocation: code.location // Use location from the scanned cut
-      }));
-
+        }));
+      
       await axios.post(buildApiUrl('processing-receipts'), {
         receipts: newReceipts
       });
@@ -395,7 +395,7 @@ function ReceiveFromProcessing() {
                       </TableBody>
                     </Table>
                   </TableContainer>
-                  
+
                   <Button
                     variant="contained"
                     fullWidth
